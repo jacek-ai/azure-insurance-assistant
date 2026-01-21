@@ -8,7 +8,7 @@ resource gpt4o 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
   parent: aiFoundry
   name: 'gpt-4o'
   sku: {
-    capacity: 1
+    capacity: 5
     name: 'GlobalStandard'
   }
   properties: {
@@ -26,7 +26,7 @@ resource embed 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
     gpt4o
   ]
   sku: {
-    capacity: 1
+    capacity: 200
     name: 'GlobalStandard'
   }
   properties: {
