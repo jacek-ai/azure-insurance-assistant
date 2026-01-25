@@ -6,7 +6,8 @@ via REST API with support for custom field mappings.
 
 Features:
 - Creates Knowledge Source from JSON template
-- Adds custom fields to existing indexes
+- Adds custom fields to existing indexe
+- Adds field mappings to indexer
 - Updates skillset projections with new field mappings
 - Supports API key and Azure AD authentication
 - Automatic retry logic for transient failures
@@ -186,14 +187,14 @@ class AzureSearchRestClient:
 
         url = f"{self.base_url}{path}"
 
-        # zbuduj body
+        # prepare body
         body = None
         if json_template_path is not None:
             body = self._load_json_template(json_template_path, template_params or {})
         elif json_body is not None:
             body = json_body
 
-        # nagłówki
+        # prepare headers
         req_headers: Dict[str, str] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
@@ -210,8 +211,8 @@ class AzureSearchRestClient:
         
         print(f"{method} {url}")
         print(f"params: {params}")
-        print(f"headers: {req_headers}")
-        print(f"body: {json.dumps(body, indent=2, ensure_ascii=False)}")
+        # print(f"headers: {req_headers}")
+        # print(f"body: {json.dumps(body, indent=2, ensure_ascii=False)}")
 
         # Retry logic for errors (429 rate limiting, 5xx server errors)
         last_exc = None
@@ -306,6 +307,53 @@ def add_field_to_index(
     
     return True
 
+def add_field_mapping_to_indexer(
+    indexer_definition: JsonDict,
+    source_field: str,
+    target_field: str,
+    delimiter: str
+) -> bool:
+    """
+    Adds a field mapping to the indexer definition with use of mappingFunction: extractTokenAtPosition
+    for product_id extraction from file name
+
+    Args:
+        indexer_definition: The indexer JSON definition
+        source_field: Source field name (e.g., "metadata_storage_name")
+        target_field: Target field name (e.g., "product_id")
+        delimiter: Delimiter for extractTokenAtPosition function (e.g., "__")
+
+    Returns:
+        True if field was added, False otherwise
+    """
+    # Get fieldMappings array from indexer definition
+    field_mappings = indexer_definition.get("fieldMappings")
+    if not isinstance(field_mappings, list):
+        return False
+
+    # Check if mapping already exists
+    if any(m.get("targetFieldName") == target_field for m in field_mappings):
+        return False
+
+    # New mapping definition with extractTokenAtPosition function
+    new_mapping = {
+        "sourceFieldName": source_field,
+        "targetFieldName": target_field,
+        "mappingFunction": {
+            "name": "extractTokenAtPosition",
+            "parameters": {
+                "delimiter": delimiter,
+                "position@odata.type": "#Int64",
+                "position": 0
+            }
+        }
+    }
+
+    # Add the mapping (this updates fieldMappings in-place)
+    field_mappings.append(new_mapping)
+
+    return True
+
 def add_field_mapping_to_skillset(
     skillset_definition: JsonDict,
     field_name: str,
@@ -363,6 +411,7 @@ def provision_data_plane():
     """
     # Sleep time (seconds) to wait before next operation
     index_name = "knowledgesource-index"
+    indexer_name = "knowledgesource-indexer"
     skillset_name = "knowledgesource-skillset"
     sleep_time=10
     
@@ -377,6 +426,7 @@ def provision_data_plane():
     search_knowledgesource_name = os.getenv("SEARCH_KNOWLEDGESOURCE_NAME")
     storage_connection_string = os.getenv("STORAGE_CONNECTION_STRING")
     storage_containter_name = os.getenv("STORAGE_CONTAINER_NAME")
+    search_product_id_delimiter = os.getenv("SEARCH_PRODUCT_ID_DELIMITER", "__")
 
     if not base_url or not api_version:
         raise ValueError("Missing required environment variables: SEARCH_SERVICE_BASE_URL, SEARCH_API_VERSION")
@@ -455,6 +505,44 @@ def provision_data_plane():
         print(f"Sleeping for {sleep_time} seconds...")
         time.sleep(sleep_time)
 
+
+        """
+        INDEXER UPDATE -------------------------------
+        """
+
+        # Get indexer definition
+        rest_response = client.request(
+            "GET",
+            f"/indexers('{indexer_name}')"
+        )
+
+        if rest_response:
+            print(f"Retrieved indexer: {rest_response.get('name')}")
+            
+            # Add field mapping to indexer for product_id
+            was_added = add_field_mapping_to_indexer(
+                rest_response,
+                source_field="metadata_storage_name",
+                target_field="product_id",
+                delimiter=search_product_id_delimiter
+            )
+            
+            if was_added:
+                print(f"Added 'product_id' mapping to the indexer definition json")
+                
+                # Update indexer
+                updated_response = client.request(
+                    "PUT",
+                    f"/indexers('{indexer_name}')",
+                    json_body=rest_response
+                )
+                print(f"Indexer updated successfully")
+            else:
+                print(f"Warning: Mapping to the indexer not added!")
+        else:
+            print(f"Warning: Empty response for GET indexer '{indexer_name}'")
+
+
         """
         SKILLSET UPDATE -------------------------------
         """
@@ -472,7 +560,7 @@ def provision_data_plane():
             was_added = add_field_mapping_to_skillset(
                 rest_response,
                 field_name="product_id",
-                field_source="/document/metadata_storage_name"
+                field_source="/document/product_id"
             )
             
             if was_added:
