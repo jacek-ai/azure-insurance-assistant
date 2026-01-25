@@ -36,16 +36,16 @@ resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@20
 }
 
 /*
-  RBAC: allow Azure AI Search (managed identity) to read blobs from the container
+  RBAC: allow Azure AI Search (managed identity) to contribute to blobs in the storage account
   Role: Storage Blob Data Reader
 */
-var storageBlobDataReaderRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
+var storageBlobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
-resource searchBlobReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(container.id, readerPrincipalId, storageBlobDataReaderRoleId)
-  scope: container
+resource searchBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, readerPrincipalId, storageBlobDataContributorRoleId)
+  scope: storageAccount
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataReaderRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', storageBlobDataContributorRoleId)
     principalId: readerPrincipalId
     principalType: 'ServicePrincipal'
   }

@@ -1,0 +1,24 @@
+{
+  "name": "${knowledgesourceName}",
+  "kind": "azureBlob",
+  "description": "Knowledge source for the insurance assistant",
+  "encryptionKey": null,
+  "azureBlobParameters": {
+    "connectionString": "${storageConnectionString}",
+    "containerName": "${containerName}",
+    "ingestionParameters": {
+      "identity": null,
+      "disableImageVerbalization": null,
+      "ingestionPermissionOptions": [],
+      "contentExtractionMode": "minimal",
+      "embeddingModel": {
+        "kind": "azureOpenAI",
+        "azureOpenAIParameters": {
+          "resourceUri": "${aiEndpoint}",
+          "deploymentId": "${aiModelDeployment}",
+          "modelName": "${aiMOdelName}"
+        }
+      }
+    }
+  }
+}
