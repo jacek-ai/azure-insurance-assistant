@@ -1,0 +1,22 @@
+{
+  "Products": [
+    {
+      	"product_id": "PROD_00001",
+      	"product_name": "Ubezpieczenie turystyczne Wojażer",
+        "product_version_no": "1.0",
+      	"product_type": "Turystyczne",
+      	"date_from": "2025-01-01",
+      	"date_to": "2025-12-31",   
+      	"product_description": "Produkt ubezpieczenia turystycznego Wojażer – wersja 1.0"
+    },
+    {
+      	"product_id": "PROD_00002",
+      	"product_name": "Ubezpieczenie turystyczne Wojażer",
+      	"product_version_no": "2.0",
+      	"product_type": "Turystyczne",
+      	"date_from": "2026-01-01",
+      	"date_to": "",
+      	"product_description": "Produkt ubezpieczenia turystycznego Wojażer – wersja 2.0"
+    }
+  ]
+}

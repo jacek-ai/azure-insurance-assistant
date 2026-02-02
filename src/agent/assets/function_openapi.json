@@ -1,0 +1,170 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Insurance Assistant Function API",
+    "version": "1.0.0",
+    "description": "HTTP endpoints hosted in Azure Functions that can be called by the Foundry agent."
+  },
+  "servers": [
+    {
+      "url": "https://REPLACE_ME"
+    }
+  ],
+  "paths": {
+    "/api/search_chunks": {
+      "post": {
+        "operationId": "search_chunks",
+        "summary": "Search chunks by product",
+        "description": "Searches Azure AI Search for chunks matching the query, hard-filtered by product_id.",
+        "security": [
+          {
+            "functionKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["query", "product_id"],
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "description": "User query to search for"
+                  },
+                  "product_id": {
+                    "type": "string",
+                    "description": "Product identifier used to hard-filter search results"
+                  },
+                  "top": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "default": 5,
+                    "description": "Max number of chunks to return"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": ["string", "null"],
+                      "description": "Error message when the search failed; null on success"
+                    },
+                    "chunks": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {"type": "string"},
+                          "product_id": {"type": "string"},
+                          "text": {"type": "string", "nullable": true},
+                          "score": {"type": "number", "nullable": true},
+                          "source": {
+                            "type": "object",
+                            "properties": {
+                              "blob_url": {"type": "string", "nullable": true},
+                              "snippet_parent_id": {"type": "string", "nullable": true},
+                              "metadata_storage_name": {"type": "string", "nullable": true},
+                              "metadata_storage_path": {"type": "string", "nullable": true},
+                              "metadata_storage_uri": {"type": "string", "nullable": true}
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/products": {
+      "post": {
+        "operationId": "list_products",
+        "summary": "List products",
+        "description": "Returns the product list from Blob Storage, optionally filtered by product_type and/or an effective date.",
+        "security": [
+          {
+            "functionKey": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "product_type": {
+                    "type": "string",
+                    "description": "Optional product type filter (exact match, case-insensitive)"
+                  },
+                  "date": {
+                    "type": "string",
+                    "description": "Optional effective date (YYYY-MM-DD). Returns products active on this date.",
+                    "format": "date"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": ["string", "null"],
+                      "description": "Error message when the operation failed; null on success"
+                    },
+                    "products": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "product_id": {"type": "string"},
+                          "product_name": {"type": "string"},
+                          "product_version_no": {"type": "string"},
+                          "product_type": {"type": "string"},
+                          "date_from": {"type": "string", "format": "date"},
+                          "date_to": {"type": "string", "nullable": true},
+                          "product_description": {"type": "string"}
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "functionKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-functions-key"
+      }
+    }
+  }
+}

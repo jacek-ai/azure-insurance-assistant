@@ -1,0 +1,26 @@
+using './main.bicep'
+
+// Example parameters file showing how to provide the Azure Functions host key
+// to the AI Foundry Project connection via Key Vault.
+//
+// Prereqs:
+// - Create a Key Vault and a secret that contains the Functions host key (e.g. the 'default' host key).
+// - Give the deployment identity access to read the secret.
+
+// Required by main.bicep. If you use scripts/deploy.ps1, this is overridden automatically.
+param userObjectId = ''
+
+// Option 1 (common): reference an existing Key Vault secret.
+// Secret value should be the Functions host key (x-functions-key header value).
+param functionXFunctionsKey = az.getSecret('kv-<existing-name>', 'functions-host-key-default')
+
+// Option 2 (self-contained): have the deployment create a Key Vault and write the secret.
+// In this option you still need to provide the secret value (e.g. from your CI/CD secret store).
+// This value is also used to set the Function App host key named 'default' in the same deployment.
+// param functionXFunctionsKey = '<functions-host-key-value>'
+// param createKeyVault = true
+// param keyVaultName = 'kv-<new-name>'
+// param keyVaultFunctionKeySecretName = 'functions-host-key-default'
+
+// Optional override
+param functionProjectConnectionName = 'con-function-insurance-assistance'

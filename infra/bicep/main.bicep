@@ -1,20 +1,32 @@
 @description('ObjectId logged in user (Entra ID)')
 param userObjectId string
 
+@secure()
+@description('Azure Functions host key value to store in the AI Foundry Project connection as x-functions-key. Leave empty to skip creating the connection.')
+param functionXFunctionsKey string = ''
+
+@description('AI Foundry Project connection name for the Azure Functions x-functions-key')
+param functionProjectConnectionName string = 'con-function-insurance-assistance'
+
+@description('Whether to create a Key Vault and store the Functions host key as a secret')
+param createKeyVault bool = false
+
+@description('Key Vault name (used only when createKeyVault=true)')
+param keyVaultName string = ''
+
+@description('Key Vault secret name to store the Functions host key (used only when createKeyVault=true)')
+param keyVaultFunctionKeySecretName string = 'functions-host-key-default'
+
 @description('Location of all resources')
 param location string = resourceGroup().location
 
 // Resource names
-var searchName    = 'insast-dev-swedencen-srch-0001'
+var searchName = 'insast-dev-swedencen-srch-0001'
 var aiFoundryName = 'insast-dev-swedencen-ai-0001'
 var aiProjectName = 'insast-dev-swedencen-proj-0001'
-var saName        = 'insastdevswedencen0001'
+var saName = 'insastdevswedencen0001'
+var functionAppName = 'insast-dev-swedencen-fapp-0001'
 
-// RBAC role ids
-var roleSearchIndexDataContributor = '8ebe5a00-799e-43f5-93ac-243d3dce84a7' // Search Index Data Contributor
-var roleSearchIndexDataReader = '1407120a-92aa-4202-b7e9-c0e197c71c8f' // Search Index Data Reader
-var roleCognitiveServicesOpenAIUser = '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd' // Cognitive Services OpenAI User
-var roleSearchServiceContributor = '7ca78c08-252a-4471-8644-bb5ff32d4ba0' // Search Service Contributor
 /*
   An AI Foundry resources
 */
@@ -30,7 +42,7 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
   kind: 'AIServices'
   properties: {
     // required to work in AI Foundry
-    allowProjectManagement: true 
+    allowProjectManagement: true
 
     // Defines developer API endpoint subdomain
     customSubDomainName: aiFoundryName
@@ -98,68 +110,130 @@ module storage 'modules/storage.bicep' = {
   params: {
     location: location
     storageAccountName: saName
-    containerName: 'rag-data'
-    readerPrincipalId: searchService.identity.principalId
+    containerNameRagData: 'rag-data'
+    containerNameProducts: 'products'
+  }
+}
+
+/*
+  Azure Functions (Consumption)
+*/
+module functionApp 'modules/functionapp.bicep' = {
+  name: 'functionApp'
+  params: {
+    location: location
+    functionAppName: functionAppName
+    storageAccountName: saName
+  }
+  dependsOn: [
+    storage
+  ]
+}
+
+// Used to set the Function App host key within the same deployment (so one secret works end-to-end).
+resource functionKeySetterIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${functionAppName}-keysetter'
+  location: location
+}
+
+resource setFunctionHostKey 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (!empty(functionXFunctionsKey)) {
+  name: '${functionAppName}-set-hostkey'
+  location: location
+  kind: 'AzureCLI'
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${functionKeySetterIdentity.id}': {}
+    }
+  }
+  properties: {
+    azCliVersion: '2.55.0'
+    retentionInterval: 'P1D'
+    timeout: 'PT30M'
+    cleanupPreference: 'OnSuccess'
+    forceUpdateTag: uniqueString(functionXFunctionsKey)
+    environmentVariables: [
+      {
+        name: 'RESOURCE_GROUP'
+        value: resourceGroup().name
+      }
+      {
+        name: 'FUNCTION_APP_NAME'
+        value: functionAppName
+      }
+      {
+        name: 'FUNCTION_X_FUNCTIONS_KEY'
+        secureValue: functionXFunctionsKey
+      }
+    ]
+    scriptContent: '''
+set -euo pipefail
+
+echo "Setting Function App host key 'default'..."
+az functionapp keys set \
+  -g "$RESOURCE_GROUP" \
+  -n "$FUNCTION_APP_NAME" \
+  --key-type functionKeys \
+  --key-name default \
+  --key-value "$FUNCTION_X_FUNCTIONS_KEY" \
+  -o none
+echo "Done."
+'''
+  }
+  dependsOn: [
+    functionApp
+    rbac
+  ]
+}
+
+module keyVault 'modules/keyvault.bicep' = if (createKeyVault && !empty(keyVaultName) && !empty(functionXFunctionsKey)) {
+  name: 'keyVault'
+  params: {
+    location: location
+    keyVaultName: keyVaultName
+    userObjectId: userObjectId
+    secretName: keyVaultFunctionKeySecretName
+    secretValue: functionXFunctionsKey
+  }
+}
+
+/*
+  Foundry project connection used by the agent OpenAPI tool to call Azure Functions.
+  Stores a custom header key named 'x-functions-key'.
+*/
+resource functionProjectConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = if (!empty(functionXFunctionsKey)) {
+  name: functionProjectConnectionName
+  parent: aiProject
+  properties: {
+    category: 'CustomKeys'
+    authType: 'CustomKeys'
+    target: 'https://${functionApp.outputs.functionAppDefaultHostname}'
+    isSharedToAll: true
+    credentials: {
+      keys: {
+        'x-functions-key': functionXFunctionsKey
+      }
+    }
   }
 }
 
 /* --------------------------------- Grant RBAC   -------------------------------------- */
 
-/*
-  RBAC: Allow Azure AI Search service's managed identity to call Azure OpenAI (for enrichment/ingestion embeddings)
-  Role: Cognitive Services OpenAI User
-*/
-resource searchToOpenAI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiFoundry.id, searchService.id, roleCognitiveServicesOpenAIUser)
-  scope: aiFoundry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleCognitiveServicesOpenAIUser)
-    principalId: searchService.identity.principalId
-    principalType: 'ServicePrincipal'
+module rbac 'modules/rbac.bicep' = {
+  name: 'rbac'
+  params: {
+    userObjectId: userObjectId
+    searchServiceName: searchName
+    searchServicePrincipalId: searchService.identity.principalId
+    aiFoundryName: aiFoundryName
+    storageAccountName: saName
+    functionAppPrincipalId: functionApp.outputs.functionAppPrincipalId
+    functionAppName: functionAppName
+    grantFunctionKeySetterContributor: !empty(functionXFunctionsKey)
+    functionKeySetterPrincipalId: functionKeySetterIdentity.properties.principalId
   }
+  dependsOn: [
+    aiFoundry
+    storage
+  ]
 }
-
-/*
-  RBAC: Allow logged in user to use Azure AI Search indexes (read/write)
-  Role: Search Index Data Contributor
-*/
-resource userSearchIndexContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, userObjectId, roleSearchIndexDataContributor)
-  scope: searchService
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchIndexDataContributor)
-    principalId: userObjectId
-    principalType: 'User'
-  }
-}
-
-/*
-  RBAC: Allow logged in user to use Azure AI Search indexes (read only)
-  Role: Search Index Data Reader
-*/
-resource userSearchIndexReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, userObjectId, roleSearchIndexDataReader)
-  scope: searchService
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchIndexDataReader)
-    principalId: userObjectId
-    principalType: 'User'
-  }
-}
-
-/*
-  RBAC: Allow logged-in user to manage Azure AI Search service configuration (admin operations)
-  Role: Search Service Contributor
-*/
-resource userSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(searchService.id, userObjectId, roleSearchServiceContributor)
-  scope: searchService
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchServiceContributor)
-    principalId: userObjectId
-    principalType: 'User'
-  }
-}
-
-output storageAccountId string = storage.outputs.storageAccountId
-output containerId string = storage.outputs.containerId

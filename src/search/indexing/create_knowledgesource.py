@@ -211,8 +211,8 @@ class AzureSearchRestClient:
         
         print(f"{method} {url}")
         print(f"params: {params}")
-        # print(f"headers: {req_headers}")
-        # print(f"body: {json.dumps(body, indent=2, ensure_ascii=False)}")
+        print(f"headers: {req_headers}")
+        print(f"body: {json.dumps(body, indent=2, ensure_ascii=False)}")
 
         # Retry logic for errors (429 rate limiting, 5xx server errors)
         last_exc = None

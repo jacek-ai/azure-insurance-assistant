@@ -1,0 +1,7 @@
+# Local Azure Functions settings
+local.settings.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
