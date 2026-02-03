@@ -20,6 +20,15 @@ param keyVaultFunctionKeySecretName string = 'functions-host-key-default'
 @description('Location of all resources')
 param location string = resourceGroup().location
 
+@description('Azure AI Search index name used by the Functions tool (RAG retrieval)')
+param searchIndexName string = 'knowledgesource-index'
+
+@description('Blob container name holding the product catalog JSON')
+param productsContainerName string = 'products'
+
+@description('Blob name of the product catalog JSON')
+param productsBlobName string = 'products.json'
+
 // Resource names
 var searchName = 'insast-dev-swedencen-srch-0001'
 var aiFoundryName = 'insast-dev-swedencen-ai-0001'
@@ -102,6 +111,9 @@ resource searchService 'Microsoft.Search/searchServices@2023-11-01' = {
   }
 }
 
+// Standard public cloud endpoint for Azure AI Search
+var searchServiceEndpoint = 'https://${searchService.name}.search.windows.net'
+
 /*
   Storage module deployment
 */
@@ -124,6 +136,10 @@ module functionApp 'modules/functionapp.bicep' = {
     location: location
     functionAppName: functionAppName
     storageAccountName: saName
+    searchServiceEndpoint: searchServiceEndpoint
+    searchIndexName: searchIndexName
+    productsContainerName: productsContainerName
+    productsBlobName: productsBlobName
   }
   dependsOn: [
     storage
@@ -226,6 +242,7 @@ module rbac 'modules/rbac.bicep' = {
     searchServiceName: searchName
     searchServicePrincipalId: searchService.identity.principalId
     aiFoundryName: aiFoundryName
+    aiProjectName: aiProjectName
     storageAccountName: saName
     functionAppPrincipalId: functionApp.outputs.functionAppPrincipalId
     functionAppName: functionAppName

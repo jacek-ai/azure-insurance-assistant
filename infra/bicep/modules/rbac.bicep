@@ -10,6 +10,9 @@ param searchServicePrincipalId string
 @description('Name of the Azure AI Foundry account (Microsoft.CognitiveServices/accounts)')
 param aiFoundryName string
 
+@description('Name of the Azure AI Foundry project (Microsoft.CognitiveServices/accounts/projects)')
+param aiProjectName string
+
 @description('Name of the Storage Account')
 param storageAccountName string
 
@@ -33,9 +36,15 @@ var roleSearchServiceContributor = '7ca78c08-252a-4471-8644-bb5ff32d4ba0' // Sea
 var roleStorageBlobDataContributor = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe' // Storage Blob Data Contributor
 var roleStorageBlobDataReader = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1' // Storage Blob Data Reader
 var roleContributor = 'b24988ac-6180-42a0-ab88-20f7382dd24c' // Contributor
+var roleAzureAIOwner = 'c883944f-8b7b-4483-af10-35834be79c4a' // Azure AI Owner
 
 resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' existing = {
   name: aiFoundryName
+}
+
+resource aiProject 'Microsoft.CognitiveServices/accounts/projects@2025-04-01-preview' existing = {
+  name: aiProjectName
+  parent: aiFoundry
 }
 
 resource searchService 'Microsoft.Search/searchServices@2023-11-01' existing = {
@@ -69,12 +78,26 @@ resource functionKeySetterContributor 'Microsoft.Authorization/roleAssignments@2
   Role: Cognitive Services OpenAI User
 */
 resource searchToOpenAI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiFoundry.id, searchService.id, roleCognitiveServicesOpenAIUser)
+  name: guid(aiFoundry.id, searchServicePrincipalId, roleCognitiveServicesOpenAIUser)
   scope: aiFoundry
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleCognitiveServicesOpenAIUser)
     principalId: searchServicePrincipalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+/*
+  RBAC: Allow logged-in user to manage Azure AI Foundry resources from code (e.g., agents, projects, connections)
+  Role: Azure AI Owner
+*/
+resource userAiOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(aiProject.id, userObjectId, roleAzureAIOwner)
+  scope: aiProject
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleAzureAIOwner)
+    principalId: userObjectId
+    principalType: 'User'
   }
 }
 

@@ -24,3 +24,8 @@ param functionXFunctionsKey = az.getSecret('kv-<existing-name>', 'functions-host
 
 // Optional override
 param functionProjectConnectionName = 'con-function-insurance-assistance'
+
+// Optional overrides for Function App app settings
+param searchIndexName = 'knowledgesource-index'
+param productsContainerName = 'products'
+param productsBlobName = 'products.json'

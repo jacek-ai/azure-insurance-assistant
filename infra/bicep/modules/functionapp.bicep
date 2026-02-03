@@ -7,12 +7,26 @@ param functionAppName string
 @description('Storage account name used for AzureWebJobsStorage')
 param storageAccountName string
 
+@description('Azure AI Search endpoint (e.g. https://<service>.search.windows.net)')
+param searchServiceEndpoint string
+
+@description('Azure AI Search index name used for RAG retrieval')
+param searchIndexName string = 'knowledgesource-index'
+
+@description('Blob container name holding the product catalog')
+param productsContainerName string = 'products'
+
+@description('Blob name of the product catalog JSON')
+param productsBlobName string = 'products.json'
+
 @description('Python runtime version for Linux Functions')
 param pythonVersion string = '3.11'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' existing = {
   name: storageAccountName
 }
+
+var blobAccountUrl = 'https://${storageAccountName}.blob.${environment().suffixes.storage}'
 
 var storageKey = storageAccount.listKeys().keys[0].value
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageKey};EndpointSuffix=${environment().suffixes.storage}'
@@ -61,6 +75,26 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'WEBSITE_RUN_FROM_PACKAGE'
           value: '1'
+        }
+        {
+          name: 'SEARCH_SERVICE_ENDPOINT'
+          value: searchServiceEndpoint
+        }
+        {
+          name: 'SEARCH_INDEX_NAME'
+          value: searchIndexName
+        }
+        {
+          name: 'BLOB_ACCOUNT_URL'
+          value: blobAccountUrl
+        }
+        {
+          name: 'PRODUCTS_CONTAINER_NAME'
+          value: productsContainerName
+        }
+        {
+          name: 'PRODUCTS_BLOB_NAME'
+          value: productsBlobName
         }
       ]
     }

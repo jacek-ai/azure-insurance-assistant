@@ -1,0 +1,984 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "6995142743992058045"
+    }
+  },
+  "parameters": {
+    "userObjectId": {
+      "type": "string",
+      "metadata": {
+        "description": "ObjectId logged in user (Entra ID)"
+      }
+    },
+    "functionXFunctionsKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Azure Functions host key value to store in the AI Foundry Project connection as x-functions-key. Leave empty to skip creating the connection."
+      }
+    },
+    "functionProjectConnectionName": {
+      "type": "string",
+      "defaultValue": "con-function-insurance-assistance",
+      "metadata": {
+        "description": "AI Foundry Project connection name for the Azure Functions x-functions-key"
+      }
+    },
+    "createKeyVault": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Whether to create a Key Vault and store the Functions host key as a secret"
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Key Vault name (used only when createKeyVault=true)"
+      }
+    },
+    "keyVaultFunctionKeySecretName": {
+      "type": "string",
+      "defaultValue": "functions-host-key-default",
+      "metadata": {
+        "description": "Key Vault secret name to store the Functions host key (used only when createKeyVault=true)"
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Location of all resources"
+      }
+    },
+    "searchIndexName": {
+      "type": "string",
+      "defaultValue": "knowledgesource-index",
+      "metadata": {
+        "description": "Azure AI Search index name used by the Functions tool (RAG retrieval)"
+      }
+    },
+    "productsContainerName": {
+      "type": "string",
+      "defaultValue": "products",
+      "metadata": {
+        "description": "Blob container name holding the product catalog JSON"
+      }
+    },
+    "productsBlobName": {
+      "type": "string",
+      "defaultValue": "products.json",
+      "metadata": {
+        "description": "Blob name of the product catalog JSON"
+      }
+    }
+  },
+  "variables": {
+    "searchName": "insast-dev-swedencen-srch-0001",
+    "aiFoundryName": "insast-dev-swedencen-ai-0001",
+    "aiProjectName": "insast-dev-swedencen-proj-0001",
+    "saName": "insastdevswedencen0001",
+    "functionAppName": "insast-dev-swedencen-fapp-0001",
+    "searchServiceEndpoint": "[format('https://{0}.search.windows.net', variables('searchName'))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.CognitiveServices/accounts",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[variables('aiFoundryName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "sku": {
+        "name": "S0"
+      },
+      "kind": "AIServices",
+      "properties": {
+        "allowProjectManagement": true,
+        "customSubDomainName": "[variables('aiFoundryName')]",
+        "disableLocalAuth": true
+      }
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/projects",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[format('{0}/{1}', variables('aiFoundryName'), variables('aiProjectName'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {},
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiFoundryName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Search/searchServices",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('searchName')]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "sku": {
+        "name": "free"
+      },
+      "properties": {
+        "replicaCount": 1,
+        "partitionCount": 1,
+        "hostingMode": "default",
+        "disableLocalAuth": false,
+        "authOptions": {
+          "aadOrApiKey": {
+            "aadAuthFailureMode": "http401WithBearerChallenge"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-keysetter', variables('functionAppName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "condition": "[not(empty(parameters('functionXFunctionsKey')))]",
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2023-08-01",
+      "name": "[format('{0}-set-hostkey', variables('functionAppName'))]",
+      "location": "[parameters('location')]",
+      "kind": "AzureCLI",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-keysetter', variables('functionAppName'))))]": {}
+        }
+      },
+      "properties": {
+        "azCliVersion": "2.55.0",
+        "retentionInterval": "P1D",
+        "timeout": "PT30M",
+        "cleanupPreference": "OnSuccess",
+        "forceUpdateTag": "[uniqueString(parameters('functionXFunctionsKey'))]",
+        "environmentVariables": [
+          {
+            "name": "RESOURCE_GROUP",
+            "value": "[resourceGroup().name]"
+          },
+          {
+            "name": "FUNCTION_APP_NAME",
+            "value": "[variables('functionAppName')]"
+          },
+          {
+            "name": "FUNCTION_X_FUNCTIONS_KEY",
+            "secureValue": "[parameters('functionXFunctionsKey')]"
+          }
+        ],
+        "scriptContent": "set -euo pipefail\r\n\r\necho \"Setting Function App host key 'default'...\"\r\naz functionapp keys set \\\r\n  -g \"$RESOURCE_GROUP\" \\\r\n  -n \"$FUNCTION_APP_NAME\" \\\r\n  --key-type functionKeys \\\r\n  --key-name default \\\r\n  --key-value \"$FUNCTION_X_FUNCTIONS_KEY\" \\\r\n  -o none\r\necho \"Done.\"\r\n"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'functionApp')]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-keysetter', variables('functionAppName')))]",
+        "[resourceId('Microsoft.Resources/deployments', 'rbac')]"
+      ]
+    },
+    {
+      "condition": "[not(empty(parameters('functionXFunctionsKey')))]",
+      "type": "Microsoft.CognitiveServices/accounts/projects/connections",
+      "apiVersion": "2025-04-01-preview",
+      "name": "[format('{0}/{1}/{2}', variables('aiFoundryName'), variables('aiProjectName'), parameters('functionProjectConnectionName'))]",
+      "properties": {
+        "category": "CustomKeys",
+        "authType": "CustomKeys",
+        "target": "[format('https://{0}', reference(resourceId('Microsoft.Resources/deployments', 'functionApp'), '2025-04-01').outputs.functionAppDefaultHostname.value)]",
+        "isSharedToAll": true,
+        "credentials": {
+          "keys": {
+            "x-functions-key": "[parameters('functionXFunctionsKey')]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryName'), variables('aiProjectName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'functionApp')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "models",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "foundryName": {
+            "value": "[variables('aiFoundryName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "18285297675516127579"
+            }
+          },
+          "parameters": {
+            "foundryName": {
+              "type": "string"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', parameters('foundryName'), 'gpt-4o')]",
+              "sku": {
+                "capacity": 10,
+                "name": "GlobalStandard"
+              },
+              "properties": {
+                "model": {
+                  "name": "gpt-4o",
+                  "format": "OpenAI"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.CognitiveServices/accounts/deployments",
+              "apiVersion": "2024-10-01",
+              "name": "[format('{0}/{1}', parameters('foundryName'), 'text-embedding-3-small')]",
+              "sku": {
+                "capacity": 200,
+                "name": "GlobalStandard"
+              },
+              "properties": {
+                "model": {
+                  "name": "text-embedding-3-small",
+                  "format": "OpenAI"
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts/deployments', parameters('foundryName'), 'gpt-4o')]"
+              ]
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiFoundryName'))]",
+        "[resourceId('Microsoft.CognitiveServices/accounts/projects', variables('aiFoundryName'), variables('aiProjectName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('saName')]"
+          },
+          "containerNameRagData": {
+            "value": "rag-data"
+          },
+          "containerNameProducts": {
+            "value": "products"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "3773052802103600305"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name"
+              }
+            },
+            "containerNameRagData": {
+              "type": "string",
+              "defaultValue": "data",
+              "metadata": {
+                "description": "Blob container name to store RAG data"
+              }
+            },
+            "containerNameProducts": {
+              "type": "string",
+              "defaultValue": "products",
+              "metadata": {
+                "description": "Blob container name to store products definitions"
+              }
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2025-01-01",
+              "name": "[parameters('storageAccountName')]",
+              "location": "[parameters('location')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "accessTier": "Hot",
+                "allowBlobPublicAccess": false,
+                "minimumTlsVersion": "TLS1_2"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}', parameters('storageAccountName'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('containerNameRagData'))]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+              "apiVersion": "2023-01-01",
+              "name": "[format('{0}/{1}/{2}', parameters('storageAccountName'), 'default', parameters('containerNameProducts'))]",
+              "properties": {
+                "publicAccess": "None"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/blobServices', parameters('storageAccountName'), 'default')]"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "functionApp",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "functionAppName": {
+            "value": "[variables('functionAppName')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('saName')]"
+          },
+          "searchServiceEndpoint": {
+            "value": "[variables('searchServiceEndpoint')]"
+          },
+          "searchIndexName": {
+            "value": "[parameters('searchIndexName')]"
+          },
+          "productsContainerName": {
+            "value": "[parameters('productsContainerName')]"
+          },
+          "productsBlobName": {
+            "value": "[parameters('productsBlobName')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "8385803691480886023"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "functionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Function App name"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name used for AzureWebJobsStorage"
+              }
+            },
+            "searchServiceEndpoint": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure AI Search endpoint (e.g. https://<service>.search.windows.net)"
+              }
+            },
+            "searchIndexName": {
+              "type": "string",
+              "defaultValue": "knowledgesource-index",
+              "metadata": {
+                "description": "Azure AI Search index name used for RAG retrieval"
+              }
+            },
+            "productsContainerName": {
+              "type": "string",
+              "defaultValue": "products",
+              "metadata": {
+                "description": "Blob container name holding the product catalog"
+              }
+            },
+            "productsBlobName": {
+              "type": "string",
+              "defaultValue": "products.json",
+              "metadata": {
+                "description": "Blob name of the product catalog JSON"
+              }
+            },
+            "pythonVersion": {
+              "type": "string",
+              "defaultValue": "3.11",
+              "metadata": {
+                "description": "Python runtime version for Linux Functions"
+              }
+            }
+          },
+          "variables": {
+            "blobAccountUrl": "[format('https://{0}.blob.{1}', parameters('storageAccountName'), environment().suffixes.storage)]"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2022-09-01",
+              "name": "[format('{0}-plan', parameters('functionAppName'))]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2022-09-01",
+              "name": "[parameters('functionAppName')]",
+              "location": "[parameters('location')]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "httpsOnly": true,
+                "clientAffinityEnabled": false,
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('functionAppName')))]",
+                "siteConfig": {
+                  "linuxFxVersion": "[format('Python|{0}', parameters('pythonVersion'))]",
+                  "ftpsState": "Disabled",
+                  "minTlsVersion": "1.2",
+                  "appSettings": [
+                    {
+                      "name": "AzureWebJobsStorage",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "python"
+                    },
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "WEBSITE_RUN_FROM_PACKAGE",
+                      "value": "1"
+                    },
+                    {
+                      "name": "SEARCH_SERVICE_ENDPOINT",
+                      "value": "[parameters('searchServiceEndpoint')]"
+                    },
+                    {
+                      "name": "SEARCH_INDEX_NAME",
+                      "value": "[parameters('searchIndexName')]"
+                    },
+                    {
+                      "name": "BLOB_ACCOUNT_URL",
+                      "value": "[variables('blobAccountUrl')]"
+                    },
+                    {
+                      "name": "PRODUCTS_CONTAINER_NAME",
+                      "value": "[parameters('productsContainerName')]"
+                    },
+                    {
+                      "name": "PRODUCTS_BLOB_NAME",
+                      "value": "[parameters('productsBlobName')]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('functionAppName')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "functionAppId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+            },
+            "functionAppName": {
+              "type": "string",
+              "value": "[parameters('functionAppName')]"
+            },
+            "functionAppPrincipalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]"
+            },
+            "functionAppDefaultHostname": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01').defaultHostName]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "condition": "[and(and(parameters('createKeyVault'), not(empty(parameters('keyVaultName')))), not(empty(parameters('functionXFunctionsKey'))))]",
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyVault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "keyVaultName": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "userObjectId": {
+            "value": "[parameters('userObjectId')]"
+          },
+          "secretName": {
+            "value": "[parameters('keyVaultFunctionKeySecretName')]"
+          },
+          "secretValue": {
+            "value": "[parameters('functionXFunctionsKey')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "9771536639499438846"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string",
+              "metadata": {
+                "description": "Azure region"
+              }
+            },
+            "keyVaultName": {
+              "type": "string",
+              "metadata": {
+                "description": "Key Vault name"
+              }
+            },
+            "tenantId": {
+              "type": "string",
+              "defaultValue": "[subscription().tenantId]",
+              "metadata": {
+                "description": "Entra ID tenant id"
+              }
+            },
+            "userObjectId": {
+              "type": "string",
+              "metadata": {
+                "description": "ObjectId of a user/admin that should be able to manage secrets"
+              }
+            },
+            "secretName": {
+              "type": "string",
+              "metadata": {
+                "description": "Secret name to create/update"
+              }
+            },
+            "secretValue": {
+              "type": "securestring",
+              "metadata": {
+                "description": "Secret value"
+              }
+            }
+          },
+          "variables": {
+            "roleKeyVaultSecretsOfficer": "b86a8fe4-44ce-4948-aee5-eccb2c155cd7"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2025-05-01",
+              "name": "[parameters('keyVaultName')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "tenantId": "[parameters('tenantId')]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "enableRbacAuthorization": true,
+                "enabledForDeployment": false,
+                "enabledForDiskEncryption": false,
+                "enabledForTemplateDeployment": true,
+                "publicNetworkAccess": "Enabled",
+                "networkAcls": {
+                  "bypass": "AzureServices",
+                  "defaultAction": "Allow"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('userObjectId'), variables('roleKeyVaultSecretsOfficer'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleKeyVaultSecretsOfficer'))]",
+                "principalId": "[parameters('userObjectId')]",
+                "principalType": "User"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2025-05-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), parameters('secretName'))]",
+              "properties": {
+                "value": "[parameters('secretValue')]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+                "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), parameters('userObjectId'), variables('roleKeyVaultSecretsOfficer')))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "keyVaultId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]"
+            },
+            "keyVaultName": {
+              "type": "string",
+              "value": "[parameters('keyVaultName')]"
+            },
+            "keyVaultUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName')), '2025-05-01').vaultUri]"
+            },
+            "secretName": {
+              "type": "string",
+              "value": "[parameters('secretName')]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "rbac",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "userObjectId": {
+            "value": "[parameters('userObjectId')]"
+          },
+          "searchServiceName": {
+            "value": "[variables('searchName')]"
+          },
+          "searchServicePrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Search/searchServices', variables('searchName')), '2023-11-01', 'full').identity.principalId]"
+          },
+          "aiFoundryName": {
+            "value": "[variables('aiFoundryName')]"
+          },
+          "aiProjectName": {
+            "value": "[variables('aiProjectName')]"
+          },
+          "storageAccountName": {
+            "value": "[variables('saName')]"
+          },
+          "functionAppPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'functionApp'), '2025-04-01').outputs.functionAppPrincipalId.value]"
+          },
+          "functionAppName": {
+            "value": "[variables('functionAppName')]"
+          },
+          "grantFunctionKeySetterContributor": {
+            "value": "[not(empty(parameters('functionXFunctionsKey')))]"
+          },
+          "functionKeySetterPrincipalId": {
+            "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-keysetter', variables('functionAppName'))), '2023-01-31').principalId]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "2979419258022422422"
+            }
+          },
+          "parameters": {
+            "userObjectId": {
+              "type": "string",
+              "metadata": {
+                "description": "ObjectId logged in user (Entra ID)"
+              }
+            },
+            "searchServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Search service"
+              }
+            },
+            "searchServicePrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Azure AI Search managed identity"
+              }
+            },
+            "aiFoundryName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Foundry account (Microsoft.CognitiveServices/accounts)"
+              }
+            },
+            "aiProjectName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Azure AI Foundry project (Microsoft.CognitiveServices/accounts/projects)"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Storage Account"
+              }
+            },
+            "functionAppPrincipalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID of the Function App managed identity"
+              }
+            },
+            "functionAppName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Function App (Microsoft.Web/sites)"
+              }
+            },
+            "grantFunctionKeySetterContributor": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Whether to grant Contributor on the Function App to the user-assigned identity that sets function keys during deployment"
+              }
+            },
+            "functionKeySetterPrincipalId": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Principal ID of the user-assigned identity that sets function keys during deployment (used only when grantFunctionKeySetterContributor=true)"
+              }
+            }
+          },
+          "variables": {
+            "roleSearchIndexDataContributor": "8ebe5a00-799e-43f5-93ac-243d3dce84a7",
+            "roleSearchIndexDataReader": "1407120a-92aa-4202-b7e9-c0e197c71c8f",
+            "roleCognitiveServicesOpenAIUser": "5e0bd9bd-7b93-4f28-af87-19fc36ad61bd",
+            "roleSearchServiceContributor": "7ca78c08-252a-4471-8644-bb5ff32d4ba0",
+            "roleStorageBlobDataContributor": "ba92f5b4-2d11-453d-a403-e96b0029c9fe",
+            "roleStorageBlobDataReader": "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1",
+            "roleContributor": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+            "roleAzureAIOwner": "c883944f-8b7b-4483-af10-35834be79c4a"
+          },
+          "resources": [
+            {
+              "condition": "[and(parameters('grantFunctionKeySetterContributor'), not(empty(parameters('functionKeySetterPrincipalId'))))]",
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]",
+              "name": "[guid(resourceId('Microsoft.Web/sites', parameters('functionAppName')), parameters('functionKeySetterPrincipalId'), variables('roleContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleContributor'))]",
+                "principalId": "[parameters('functionKeySetterPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName')), resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), variables('roleCognitiveServicesOpenAIUser'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
+                "principalId": "[parameters('searchServicePrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiFoundryName'), parameters('aiProjectName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiFoundryName'), parameters('aiProjectName')), parameters('userObjectId'), variables('roleAzureAIOwner'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleAzureAIOwner'))]",
+                "principalId": "[parameters('userObjectId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('userObjectId'), variables('roleSearchIndexDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
+                "principalId": "[parameters('userObjectId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('userObjectId'), variables('roleSearchIndexDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataReader'))]",
+                "principalId": "[parameters('userObjectId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('userObjectId'), variables('roleSearchServiceContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchServiceContributor'))]",
+                "principalId": "[parameters('userObjectId')]",
+                "principalType": "User"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('searchServicePrincipalId'), variables('roleStorageBlobDataContributor'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleStorageBlobDataContributor'))]",
+                "principalId": "[parameters('searchServicePrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('functionAppPrincipalId'), variables('roleStorageBlobDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleStorageBlobDataReader'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            },
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Search/searchServices', parameters('searchServiceName'))]",
+              "name": "[guid(resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), parameters('functionAppPrincipalId'), variables('roleSearchIndexDataReader'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataReader'))]",
+                "principalId": "[parameters('functionAppPrincipalId')]",
+                "principalType": "ServicePrincipal"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.CognitiveServices/accounts', variables('aiFoundryName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'functionApp')]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-keysetter', variables('functionAppName')))]",
+        "[resourceId('Microsoft.Search/searchServices', variables('searchName'))]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ]
+}

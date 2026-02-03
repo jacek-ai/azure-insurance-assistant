@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     This repo's scripts/deploy.ps1 deploys infrastructure (Bicep) but does not publish Function App code.
-    This script publishes the Function App located in src/functions/hello-api using Azure Functions Core Tools.
+    This script publishes the Function App located in src/functions/insurance-assistant-functions using Azure Functions Core Tools.
 
 PREREQUISITES
     - Azure CLI: az (and run: az login)
@@ -29,7 +29,7 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw "Missing 'az'. 
 if (-not (Get-Command func -ErrorAction SilentlyContinue)) { throw "Missing 'func'. Install Azure Functions Core Tools." }
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$functionProjectPath = Join-Path $repoRoot "src\functions\hello-api"
+$functionProjectPath = Join-Path $repoRoot "src\functions\insurance-assistant-functions"
 
 if (-not (Test-Path $functionProjectPath)) {
     throw "Function project path not found: $functionProjectPath"

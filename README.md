@@ -22,7 +22,7 @@ Key files:
 
 - Agent definition and instructions: [src/agent/create_agent.py](src/agent/create_agent.py)
 - Tool schema and wiring: [src/agent/assets/function_openapi.json](src/agent/assets/function_openapi.json), [src/agent/tools/function_openapi_tool.py](src/agent/tools/function_openapi_tool.py)
-- Function endpoints: [src/functions/hello-api/function_app.py](src/functions/hello-api/function_app.py)
+- Function endpoints: [src/functions/insurance-assistant-functions/function_app.py](src/functions/insurance-assistant-functions/function_app.py)
 
 ## Azure resources (deployed with Bicep)
 
@@ -96,6 +96,12 @@ Provisioning script (data plane):
 
 - Run [scripts/verify.ps1](scripts/verify.ps1)
 
+## Azure Resources
+
+Provisioned resources:
+
+![Profisioned resources](images/resources.png)
+
 ## Agent setup (Foundry Project connection)
 
 Environment variables required by the agent creation script [src/agent/create_agent.py](src/agent/create_agent.py):
@@ -136,8 +142,8 @@ Prerequisites:
 
 Run Functions locally:
 
-- Open [src/functions/hello-api/local.settings.json](src/functions/hello-api/local.settings.json) and fill required values.
-- From [src/functions/hello-api](src/functions/hello-api): run `func start`
+- Open [src/functions/insurance-assistant-functions/local.settings.json](src/functions/insurance-assistant-functions/local.settings.json) and fill required values.
+- From [src/functions/insurance-assistant-functions](src/functions/insurance-assistant-functions): run `func start`
 
 Create/update the agent:
 
@@ -149,5 +155,5 @@ Create/update the agent:
 - [infra](infra): Bicep templates
 - [scripts](scripts): deployment and verification scripts
 - [src/agent](src/agent): agent definition + OpenAPI tool specification
-- [src/functions/hello-api](src/functions/hello-api): Azure Functions endpoints used as agent tools
+- [src/functions/insurance-assistant-functions](src/functions/insurance-assistant-functions): Azure Functions endpoints used as agent tools
 - [src/search/indexing](src/search/indexing): provisioning of Search knowledge source and index pipeline
