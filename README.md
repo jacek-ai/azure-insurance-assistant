@@ -73,7 +73,11 @@ Key implementation files:
 
 ## Architecture diagram
 
-GitHub renders Mermaid diagrams directly, so the README includes two views:
+High-level runtime architecture:
+
+![Insurance Assistant architecture](images/insurance-assistant-architecture.svg)
+
+Mermaid diagrams:
 
 - **Runtime**: how a question becomes a grounded answer (with the product gate).
 - **Provisioning**: how IaC and ingestion prepare the data plane.
@@ -267,6 +271,10 @@ You can test the agent end-to-end (including tool calls to Azure Functions) dire
 2. Navigate to **Build** → **Agents**.
 3. Open your agent and choose **Open in playground** / **Try in playground**.
 4. Ask a question that requires product context (the agent should call `list_products` first, then `search_chunks`).
+
+Example Playground chat showing a user question and the agent’s end-to-end behavior (including tool calls):
+
+![Foundry Playground chat example](images/chat.png)
 
 This is the fastest way to validate:
 
