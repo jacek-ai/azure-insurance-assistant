@@ -1,5 +1,12 @@
 # azure-insurance-assistant
 
+![Azure AI Foundry](https://img.shields.io/badge/Azure-AI%20Foundry-blue)
+![Architecture](https://img.shields.io/badge/architecture-product--gated%20RAG-purple)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+
+
+Product-gated RAG reference implementation for regulated domains (insurance).
+
 Insurance assistant built on **Azure AI Foundry** + **Azure AI Search (RAG)** with a deliberate safety constraint: **the assistant must select exactly one insurance product (and version) before it can retrieve policy chunks**.
 
 The core goal is to support an insurance agent answering customer questions using the correct OWU/terms for a **specific product and validity period**, avoiding accidental cross-product leakage.
@@ -16,7 +23,7 @@ This project demonstrates a practical approach to reduce “RAG mixing” risk b
 
 ## What it does
 
-From a user / agent perspective:
+From a user or agent perspective:
 
 - Lists available products (including versions and validity dates).
 - Enforces choosing exactly one `product_id` before any retrieval.
@@ -28,6 +35,14 @@ From an engineering perspective:
 - Uses **Managed Identity** (RBAC) for Functions → Storage/Search.
 - Deploys infrastructure via **Bicep** and automates operational wiring (“single-secret” path).
 - Includes tests validating endpoint behavior and the OpenAPI contract.
+
+## Key design principles
+
+- **Explicit product context**: require selecting exactly one product/version before retrieval.
+- **Retrieval isolation**: hard-filter Azure AI Search queries by `product_id`.
+- **Identity-based security**: Managed Identity + RBAC between Functions and data-plane services.
+- **Minimal secret surface**: use a Project Connection for the Functions key (optionally backed by Key Vault).
+- **Infrastructure as code**: provision resources and RBAC using Bicep modules.
 
 ## What makes this different from “typical RAG”
 
@@ -44,7 +59,7 @@ Why it matters:
 
 - Reduces accidental cross-product mixing (“policy A” chunks used to answer questions about “policy B”).
 - Makes the reasoning traceable: every answer is grounded in a specific product context.
-- Aligns better with real insurance workflows (agents almost always operate on a specific polisa/OWU version).
+- Aligns better with real insurance workflows (agents almost always operate on a specific policy version).
 
 Trade-offs (intentional):
 
@@ -123,7 +138,7 @@ flowchart TB
 
 ## Tech stack
 
-- **Python 3.11**
+- **Python 3.11+**
 - **Azure Functions** (Linux Consumption, Python)
 - **Azure AI Foundry** (AI Services account + Project) and **Azure AI Projects SDK**
 - **Azure AI Search** (RAG retrieval; plus ingestion/knowledge source provisioning)
@@ -199,13 +214,13 @@ Data-plane provisioning (Search knowledge source + mappings):
 
 Prerequisites:
 
-- Python 3.11
+- Python 3.11+
 - Azure CLI (`az`) and access to a subscription
 - Azure Functions Core Tools (`func`) to publish/run Functions
 
 ### 1) Provision Azure infrastructure
 
-Runs the Bicep deployment and assigns required RBAC to your signed-in user.
+Runs the Bicep deployment and assigns required RBAC roles to your signed-in user.
 
 ```powershell
 ./scripts/deploy.ps1
