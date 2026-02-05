@@ -44,7 +44,7 @@ Why it matters:
 
 - Reduces accidental cross-product mixing (“policy A” chunks used to answer questions about “policy B”).
 - Makes the reasoning traceable: every answer is grounded in a specific product context.
-- Aligns better with real insurance workflows (agents almost always operate on a конкретna polisa/OWU version).
+- Aligns better with real insurance workflows (agents almost always operate on a specific polisa/OWU version).
 
 Trade-offs (intentional):
 
@@ -120,7 +120,6 @@ flowchart TB
 	DP -->|derives product_id from blob name delimiter '__'| SEARCH
 ```
 
-If you want a static asset for slides/CV, you can export the diagrams to PNG/SVG using Mermaid CLI and the source in [docs/architecture.mmd](docs/architecture.mmd).
 
 ## Tech stack
 
