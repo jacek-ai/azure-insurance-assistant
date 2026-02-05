@@ -9,7 +9,7 @@ Product-gated RAG reference implementation for regulated domains (insurance).
 
 Insurance assistant built on **Azure AI Foundry** + **Azure AI Search (RAG)** with a deliberate safety constraint: **the assistant must select exactly one insurance product (and version) before it can retrieve policy chunks**.
 
-The core goal is to support an insurance agent answering customer questions using the correct OWU/terms for a **specific product and validity period**, avoiding accidental cross-product leakage.
+The core goal is to support an insurance agent answering customer questions using the correct policy terms for a **specific product and validity period**, avoiding accidental cross-product leakage.
 
 ## Why this project (business)
 
@@ -126,7 +126,7 @@ flowchart TB
 flowchart TB
 	DEP[Bicep deployment - infra/bicep] -->|creates| RES[Foundry + Search + Storage + Functions + RBAC + optional Key Vault]
 
-	UP[scripts/upload-test-data.ps1] -->|uploads products + OWU docs| SA[(Blob containers: products + rag-data)]
+	UP[scripts/upload-test-data.ps1] -->|uploads products + policy terms docs| SA[(Blob containers: products + rag-data)]
 
 	DP[src/search/indexing/create_knowledgesource.py - Search REST data plane] -->|creates/updates: index, skillset, indexer| SEARCH[Azure AI Search]
 
@@ -305,7 +305,7 @@ Then run:
 python ./src/agent/create_agent.py
 ```
 
-Note: the agent instructions and responses are configured to be **Polish-language** (to match the OWU documents used in the sample data).
+Note: the agent instructions and responses are configured to be **Polish-language** (to match the policy terms documents used in the sample data).
 
 ## Demo / testing in Foundry Portal (Playground)
 
