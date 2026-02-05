@@ -38,6 +38,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
+
 function Assert-AzCliLoggedIn {
   if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw 'Azure CLI (az) is not installed or not on PATH. Install Azure CLI and try again.'
@@ -114,17 +117,35 @@ if (-not $SkipFoundryConnection) {
   Assert-NotEmpty $AiProjectName 'AiProjectName'
   Assert-NotEmpty $FunctionProjectConnectionName 'FunctionProjectConnectionName'
 
-  # Nested resources use name in the form: <accountName>/<projectName>/<connectionName>
-  $connFullName = "$AiFoundryName/$AiProjectName/$FunctionProjectConnectionName"
+  # This is an ARM nested resource:
+  # /providers/Microsoft.CognitiveServices/accounts/<accountName>/projects/<projectName>/connections/<connectionName>
+  # In Azure CLI, use --parent + leaf --name. Do NOT pass a slash-separated name.
   $resourceType = 'Microsoft.CognitiveServices/accounts/projects/connections'
+  $apiVersion = '2025-04-01-preview'
+  $subscriptionId = az account show --query 'id' -o tsv
+  if ([string]::IsNullOrWhiteSpace($subscriptionId)) {
+    throw 'Unable to determine current subscription id from Azure CLI (az account show).'
+  }
 
-  $connId = az resource show -g $ResourceGroupName --resource-type $resourceType --name $connFullName --query 'id' -o tsv
-  if ([string]::IsNullOrWhiteSpace($connId)) {
+  $connResourceId = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.CognitiveServices/accounts/$AiFoundryName/projects/$AiProjectName/connections/$FunctionProjectConnectionName"
+
+  # Prefer ARM resource lookup by full id. If Azure CLI hits a known serialization bug for this nested type,
+  # fall back to a raw ARM REST call.
+  $connJson = az resource show --ids $connResourceId --api-version $apiVersion -o json 2>$null
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connJson)) {
+    $connUrl = "https://management.azure.com$connResourceId?api-version=$apiVersion"
+    $connJson = az rest --method get --url $connUrl -o json 2>$null
+  }
+
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($connJson)) {
+    $connFullName = "$AiFoundryName/$AiProjectName/$FunctionProjectConnectionName"
     throw "AI Foundry connection not found: $connFullName"
   }
 
-  $authType = az resource show -g $ResourceGroupName --resource-type $resourceType --name $connFullName --query 'properties.authType' -o tsv
-  $category = az resource show -g $ResourceGroupName --resource-type $resourceType --name $connFullName --query 'properties.category' -o tsv
+  $connObj = $connJson | ConvertFrom-Json
+  $connId = $connObj.id
+  $authType = $connObj.properties.authType
+  $category = $connObj.properties.category
 
   Write-Host "OK: Foundry connection exists ($connId)."
   Write-Host "Info: authType=$authType, category=$category (credentials not readable by design)."

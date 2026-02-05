@@ -259,7 +259,37 @@ Uploads:
 
 The indexing script uses Search REST APIs and needs environment variables (commonly via a `.env`).
 
+Use the provided template as a single source of truth for local/dev configuration:
+
+```powershell
+Copy-Item .\.env-template .\.env
+```
+
+Most scripts in [scripts](scripts) will auto-load `.env` if present (without overriding environment variables that are already set by your shell or CI).
+
 See the header comment in [src/search/indexing/create_knowledgesource.py](src/search/indexing/create_knowledgesource.py) for the exact variables.
+
+Run the provisioning script:
+
+```powershell
+python ./src/search/indexing/create_knowledgesource.py
+```
+
+Then trigger an on-demand indexer run:
+
+```powershell
+./scripts/run-indexer.ps1 -Wait
+```
+
+This script reads `SEARCH_SERVICE_ENDPOINT` and `SEARCH_API_VERSION` from the environment, or you can pass them explicitly:
+
+```powershell
+./scripts/run-indexer.ps1 \
+	-SearchServiceEndpoint "https://<service>.search.windows.net" \
+	-ApiVersion "2025-09-01" \
+	-IndexerName "knowledgesource-indexer" \
+	-Wait
+```
 
 ### 5) Create/update the agent
 
@@ -317,6 +347,31 @@ Important operational note (RBAC):
 
 - A published agent application uses its **own identity**, separate from your project identity.
 - If the agent uses tools that access Azure resources, you may need to **reassign RBAC** permissions so the published agent identity can access those resources.
+
+## Minimal CI/CD (GitHub Actions)
+
+This repo includes a minimal workflow that runs the end-to-end sequence (deploy → provision → publish → verify → upload → index → create agent):
+
+- Workflow file: [.github/workflows/deploy.yml](.github/workflows/deploy.yml)
+
+### Required secrets
+
+- `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (OIDC for `azure/login`)
+- `STORAGE_CONNECTION_STRING` (used by Search knowledge source provisioning)
+- Optional: `FUNCTION_X_FUNCTIONS_KEY` (enables single-secret wiring + Foundry Project Connection)
+
+### Required variables
+
+At minimum set:
+
+- `RESOURCE_GROUP_NAME`, `AZURE_LOCATION`
+- `SEARCH_SERVICE_ENDPOINT`, `SEARCH_API_VERSION`
+- `AI_SERVICE_ENDPOINT`, `AI_MODEL_DEPLOYMENT`, `AI_MODEL_NAME`
+- `AI_SERVICE_PROJECT_ENDPOINT`, `FUNCTION_BASE_URL`
+
+Optional but recommended:
+
+- `USER_OBJECT_ID` (if your CI identity cannot query Entra directory to resolve its objectId)
 
 References:
 

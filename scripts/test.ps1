@@ -29,6 +29,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
+
 function Get-IsWindows {
   try {
     return [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform(

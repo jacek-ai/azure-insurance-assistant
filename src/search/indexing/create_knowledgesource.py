@@ -209,10 +209,53 @@ class AzureSearchRestClient:
         else:
             raise RuntimeError("No authentication configured: set api_key or use_aad=True.")
         
+        def _redact_headers(h: Dict[str, str]) -> Dict[str, str]:
+            redacted = dict(h)
+            if "Authorization" in redacted:
+                redacted["Authorization"] = "Bearer ***"
+            if "api-key" in redacted:
+                redacted["api-key"] = "***"
+            return redacted
+
+        def _redact_json(obj: Any) -> Any:
+            sensitive_keys = {
+                "connectionString",
+                "storageConnectionString",
+                "credentials",
+                "key",
+                "keys",
+                "apiKey",
+                "api_key",
+                "Authorization",
+            }
+
+            if isinstance(obj, dict):
+                out: Dict[str, Any] = {}
+                for k, v in obj.items():
+                    key_l = str(k)
+                    if key_l in sensitive_keys or key_l.lower() in {s.lower() for s in sensitive_keys}:
+                        out[k] = "***"
+                        continue
+
+                    # Common patterns
+                    if key_l.lower().endswith("key") or key_l.lower().endswith("token"):
+                        if isinstance(v, str) and v:
+                            out[k] = "***"
+                            continue
+
+                    out[k] = _redact_json(v)
+                return out
+
+            if isinstance(obj, list):
+                return [_redact_json(x) for x in obj]
+
+            return obj
+
         print(f"{method} {url}")
         print(f"params: {params}")
-        print(f"headers: {req_headers}")
-        print(f"body: {json.dumps(body, indent=2, ensure_ascii=False)}")
+        print(f"headers: {_redact_headers(req_headers)}")
+        if body is not None:
+            print(f"body: {json.dumps(_redact_json(body), indent=2, ensure_ascii=False)}")
 
         # Retry logic for errors (429 rate limiting, 5xx server errors)
         last_exc = None
@@ -429,13 +472,20 @@ def provision_data_plane():
     search_product_id_delimiter = os.getenv("SEARCH_PRODUCT_ID_DELIMITER", "__")
 
     if not base_url or not api_version:
-        raise ValueError("Missing required environment variables: SEARCH_SERVICE_BASE_URL, SEARCH_API_VERSION")
+        raise ValueError("Missing required environment variables: SEARCH_SERVICE_ENDPOINT, SEARCH_API_VERSION")
  
-    # api-key
-    #auth = SearchAuth(api_key="PUT-YOUR-SEARCH-SERVICE-ADMIN-API-KEY-HERE")
+    # Auth selection
+    # - Prefer AAD (RBAC) by default
+    # - Allow API key auth if SEARCH_USE_AAD=false and SEARCH_ADMIN_API_KEY is provided
+    use_aad = os.getenv("SEARCH_USE_AAD", "true").strip().lower() in {"1", "true", "yes", "y"}
+    admin_api_key = os.getenv("SEARCH_ADMIN_API_KEY")
 
-    # AAD token (Managed Identity)
-    auth = SearchAuth(use_aad=True)
+    if use_aad:
+        auth = SearchAuth(use_aad=True)
+    else:
+        if not admin_api_key:
+            raise ValueError("SEARCH_USE_AAD is false, but SEARCH_ADMIN_API_KEY is not set.")
+        auth = SearchAuth(api_key=admin_api_key)
 
     client = AzureSearchRestClient(base_url, api_version, auth)
 

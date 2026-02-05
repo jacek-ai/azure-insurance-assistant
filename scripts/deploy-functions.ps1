@@ -18,12 +18,15 @@ EXAMPLES
 
 [CmdletBinding()]
 param(
-    [string] $FunctionAppName,
-    [string] $ResourceGroup = "rg-dev-insurance-assistant",
+    [string] $FunctionAppName = $env:FUNCTION_APP_NAME,
+    [string] $ResourceGroup = $(if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME)) { $env:RESOURCE_GROUP_NAME } else { "rg-dev-insurance-assistant" }),
     [switch] $BuildRemote
 )
 
 $ErrorActionPreference = "Stop"
+
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
 
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw "Missing 'az'. Install Azure CLI." }
 if (-not (Get-Command func -ErrorAction SilentlyContinue)) { throw "Missing 'func'. Install Azure Functions Core Tools." }

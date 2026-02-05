@@ -22,8 +22,8 @@
 
 [CmdletBinding()]
 param(
-  [string]$ResourceGroupName = 'rg-dev-insurance-assistant',
-  [string]$StorageAccountName = 'insastdevswedencen0001',
+  [string]$ResourceGroupName = $(if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME)) { $env:RESOURCE_GROUP_NAME } else { 'rg-dev-insurance-assistant' }),
+  [string]$StorageAccountName = $(if (-not [string]::IsNullOrWhiteSpace($env:STORAGE_ACCOUNT_NAME)) { $env:STORAGE_ACCOUNT_NAME } else { 'insastdevswedencen0001' }),
 
   [string]$ProductsContainerName = 'products',
   [string]$RagDataContainerName = 'rag-data',
@@ -36,18 +36,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-function Assert-AzCliLoggedIn {
-  if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-    throw 'Azure CLI (az) is not installed or not on PATH. Install Azure CLI and try again.'
-  }
-
-  try {
-    $null = az account show -o none 2>$null
-  }
-  catch {
-    throw 'You are not logged in to Azure CLI. Run: az login (and optionally: az account set -s <subscriptionId>)'
-  }
-}
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
 
 function Assert-PathExists([string]$Path, [string]$Label) {
   if (-not (Test-Path $Path)) {

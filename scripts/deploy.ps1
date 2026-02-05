@@ -13,21 +13,10 @@
 
 $ErrorActionPreference = "Stop"
 
-function Assert-AzCliReady {
-  if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-    throw "Azure CLI (az) is not installed or not on PATH. Install Azure CLI and try again."
-  }
-
-  try {
-    $null = az account show -o none 2>$null
-  }
-  catch {
-    throw "You are not logged in to Azure CLI. Run: az login (and optionally: az account set -s <subscriptionId>)"
-  }
-}
-
-$rg = "rg-dev-insurance-assistant"
-$loc = "swedencentral"
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
+$rg = if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME)) { $env:RESOURCE_GROUP_NAME } else { "rg-dev-insurance-assistant" }
+$loc = if (-not [string]::IsNullOrWhiteSpace($env:AZURE_LOCATION)) { $env:AZURE_LOCATION } else { "swedencentral" }
 
 # Paths relative to the scripts folder
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -38,11 +27,31 @@ if (-not (Test-Path $bicepFile)) {
   throw "Bicep file not found: $bicepFile"
 }
 
-Assert-AzCliReady
+Assert-AzCliLoggedIn
 
-$userOid = az ad signed-in-user show --query id -o tsv
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($userOid)) {
-  throw 'Unable to get signed-in user object id. Make sure you are logged in (az login) and have permission to query your profile.'
+$userOid = $env:USER_OBJECT_ID
+if ([string]::IsNullOrWhiteSpace($userOid)) {
+  $accountType = az account show --query 'user.type' -o tsv
+  $accountName = az account show --query 'user.name' -o tsv
+
+  if ($accountType -eq 'user') {
+    $userOid = az ad signed-in-user show --query id -o tsv
+  }
+  elseif ($accountType -eq 'servicePrincipal') {
+    # In GitHub Actions with azure/login (OIDC), az is logged in as a service principal.
+    # Try to resolve its object id (requires directory read permissions).
+    if (-not [string]::IsNullOrWhiteSpace($accountName)) {
+      $userOid = az ad sp show --id $accountName --query id -o tsv
+    }
+  }
+  else {
+    # Unknown/unsupported account type (e.g., managed identity in some environments)
+    $userOid = ''
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($userOid)) {
+  throw 'Unable to determine Entra objectId for RBAC assignment. Set USER_OBJECT_ID env var (recommended for CI), or run with a user login (az login) that can query its profile.'
 }
 
 $functionKey = $env:FUNCTION_X_FUNCTIONS_KEY

@@ -12,13 +12,17 @@
 
 $ErrorActionPreference = "Stop"
 
-$rg  = "rg-dev-insurance-assistant"
-$loc = "swedencentral"
+. (Join-Path $PSScriptRoot 'common.ps1')
+Import-DotEnv -NoClobber
+Assert-AzCliLoggedIn
+
+$rg  = if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_GROUP_NAME)) { $env:RESOURCE_GROUP_NAME } else { "rg-dev-insurance-assistant" }
+$loc = if (-not [string]::IsNullOrWhiteSpace($env:AZURE_LOCATION)) { $env:AZURE_LOCATION } else { "swedencentral" }
 
 # Key Vault used by this project (explicit name to avoid deleting anything else)
-$keyVaultName = "insastdevswedencenkv0001"
+$keyVaultName = if (-not [string]::IsNullOrWhiteSpace($env:KEYVAULT_NAME)) { $env:KEYVAULT_NAME } else { "insastdevswedencenkv0001" }
 
-$namePrefix = "insast-dev-"
+$namePrefix = if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_NAME_PREFIX)) { $env:RESOURCE_NAME_PREFIX } else { "insast-dev-" }
 
 # Deleting without question
 $forceDeleteRg = $false

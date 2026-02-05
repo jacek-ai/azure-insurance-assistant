@@ -1,7 +1,7 @@
 .venv/
 .vscode/
 .env
-.github/
+.github/copilot-instructions.md
 __pycache__/
 *.pyc
 *.pyo
