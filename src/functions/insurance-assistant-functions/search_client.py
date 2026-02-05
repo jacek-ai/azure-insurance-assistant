@@ -1,3 +1,8 @@
+"""Azure AI Search client used by the Function tool endpoints.
+
+Search is always hard-filtered by `product_id` to prevent cross-product leakage.
+"""
+
 import os
 from typing import Any, Dict, List, Optional
 
@@ -11,6 +16,7 @@ except ImportError:
 
 
 def _get_required_env(name: str) -> str:
+    """Read a required environment variable (raises on missing)."""
     value = os.getenv(name)
     if not value:
         raise ValueError(f"Missing environment variable: {name}")
@@ -18,11 +24,13 @@ def _get_required_env(name: str) -> str:
 
 
 def _escape_filter_value(value: str) -> str:
-    # OData string literal escaping: single quote is doubled
+    """Escape a value for use inside an OData string literal."""
+    # OData rule: single quote is doubled.
     return value.replace("'", "''")
 
 
 def _create_search_client() -> SearchClient:
+    """Create a SearchClient authenticated via DefaultAzureCredential."""
     endpoint = _get_required_env("SEARCH_SERVICE_ENDPOINT")
     index_name = _get_required_env("SEARCH_INDEX_NAME")
 
@@ -36,12 +44,19 @@ def _create_search_client() -> SearchClient:
 
 
 def search_chunks(*, query: str, product_id: str, top: int = 5) -> List[Dict[str, Any]]:
+    """Run a search query and return normalized chunk results.
+
+    Args:
+        query: Full-text query.
+        product_id: Product id used for hard filtering.
+        top: Max number of results.
+    """
     if not query or not query.strip():
         raise ValueError("query is required")
     if not product_id or not product_id.strip():
         raise ValueError("product_id is required")
 
-    # Your index uses 'snippet' as the text field; keep it configurable via env.
+    # Keep index field names configurable; different indexes may vary.
     content_field = os.getenv("SEARCH_CONTENT_FIELD", "snippet")
     select_fields = os.getenv("SEARCH_SELECT_FIELDS", "").strip()
     select = [field.strip() for field in select_fields.split(",") if field.strip()] if select_fields else None
@@ -62,7 +77,8 @@ def search_chunks(*, query: str, product_id: str, top: int = 5) -> List[Dict[str
     try:
         results = search_client.search(**search_kwargs)
     except HttpResponseError as e:
-        # If $select contains a field that doesn't exist in the index, retry without select.
+        # If $select contains a field that does not exist in the index, retry without select.
+        # This makes deployments tolerant to minor schema drift.
         message = str(e)
         if "Parameter name: $select" in message and "Could not find a property named" in message and "select" in search_kwargs:
             search_kwargs.pop("select", None)

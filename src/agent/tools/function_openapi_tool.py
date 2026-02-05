@@ -1,17 +1,13 @@
+"""Helpers for wiring Azure Functions as an OpenAPI tool for the agent."""
+
 import json
 from pathlib import Path
 
 
 def build_insurance_functions_tool(*, function_base_url: str, function_connection_id: str, openapi_spec_path: str | Path) -> dict:
-    """Build an OpenAPI tool configuration for calling Azure Functions over HTTP.
+    """Build an OpenAPI tool config for calling Azure Functions.
 
-    Args:
-        function_base_url: Base URL for the Function App (e.g. https://<app>.azurewebsites.net).
-        function_connection_id: Foundry Project Connection id that stores the Function Key (x-functions-key).
-        openapi_spec_path: Path to the OpenAPI JSON spec file.
-
-    Returns:
-        Tool dict to be passed to PromptAgentDefinition(tools=[...]).
+    The function overrides `servers[0].url` in the spec at runtime.
     """
 
     openapi_spec_path = Path(openapi_spec_path)

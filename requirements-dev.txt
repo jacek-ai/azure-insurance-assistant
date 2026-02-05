@@ -1,0 +1,6 @@
+pytest>=8.0.0
+# SDKs used by src/functions; needed to import modules in tests
+azure-functions
+azure-search-documents
+azure-identity
+azure-storage-blob

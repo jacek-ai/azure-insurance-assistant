@@ -1,0 +1,10 @@
+flowchart TB
+  DEP[Bicep deployment - infra/bicep] -->|creates| RES[Foundry + Search + Storage + Functions + RBAC + optional Key Vault]
+
+  UP[scripts/upload-test-data.ps1] -->|uploads products + OWU docs| SA[(Blob containers: products + rag-data)]
+
+  DP[src/search/indexing/create_knowledgesource.py (Search REST data plane)] -->|creates/updates: index, skillset, indexer| SEARCH[Azure AI Search]
+
+  SA -->|documents| SEARCH
+  SEARCH -->|ingestion embeddings| EMB[text-embedding-3-small - deployed in Foundry]
+  DP -->|derives product_id from blob name delimiter '__'| SEARCH

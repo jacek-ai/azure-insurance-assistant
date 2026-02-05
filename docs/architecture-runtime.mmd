@@ -1,0 +1,18 @@
+flowchart TB
+  U[User / Insurance Agent] -->|Chat| FA[Azure AI Foundry Agent - Project / Agent Version]
+
+  FA -->|OpenAPI tool call (Header: x-functions-key)| FUNC[Azure Functions Tool API]
+  PC[(Foundry Project Connection - CustomKeys: x-functions-key)] -.provides secret.-> FA
+
+  FUNC -->|list_products (read products.json)| BLOB[Azure Blob Storage - products/products.json]
+  FUNC -->|search_chunks (filter: product_id)| SEARCH[Azure AI Search - index: knowledgesource-index]
+
+  MI[[Managed Identity + RBAC]] --- FUNC
+  MI --- BLOB
+  MI --- SEARCH
+
+  SEARCH -->|chunks| FUNC
+  FUNC -->|answer grounded in chunks| FA
+  FA --> U
+
+  KV[(Azure Key Vault - optional - stores Functions host key)] -.optional secret storage.-> PC

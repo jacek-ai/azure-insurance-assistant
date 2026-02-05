@@ -1,5 +1,12 @@
+"""Create an Insurance Assistant agent in an Azure AI Project.
+
+This script reads configuration from environment variables and creates a new
+agent version that can call the deployed Functions API as agent's tools.
+"""
+
 import os
 import sys
+
 from dotenv import load_dotenv
 
 from azure.ai.projects import AIProjectClient
@@ -12,71 +19,22 @@ try:
 except ImportError:
     DefaultAzureCredential = None
 
-# Load environment variables
-load_dotenv()
-
 DEFAULT_FUNCTION_PROJECT_CONNECTION_NAME = "con-function-insurance-assistance"
 
-project_endpoint = os.getenv("AI_SERVICE_PROJECT_ENDPOINT")
-function_base_url = os.getenv("FUNCTION_BASE_URL")
-function_connection_name = os.getenv("FUNCTION_PROJECT_CONNECTION_NAME") or DEFAULT_FUNCTION_PROJECT_CONNECTION_NAME
 
-print(f"Project Endpoint: {project_endpoint}")
-if not project_endpoint:
-    print("Please set the AI_SERVICE_PROJECT_ENDPOINT environment variable.")
-    sys.exit()
+def _require_env(name: str, hint: str) -> str:
+    """Read a required environment variable."""
 
-if not function_base_url:
-    print("Please set FUNCTION_BASE_URL (e.g. https://<your-functionapp>.azurewebsites.net).")
-    sys.exit()
+    value = os.getenv(name)
+    if value:
+        return value
 
-if not os.getenv("FUNCTION_PROJECT_CONNECTION_NAME"):
-    print(
-        "FUNCTION_PROJECT_CONNECTION_NAME not set; using default: "
-        f"{DEFAULT_FUNCTION_PROJECT_CONNECTION_NAME}"
-    )
+    print(hint)
+    sys.exit(1)
 
-# Connect to the project and agent
-credential = DefaultAzureCredential(
-    exclude_environment_credential=True,
-    exclude_managed_identity_credential=True
-)
-project_client = AIProjectClient(endpoint=project_endpoint, credential=credential)
-if project_client:
-    print(f"PROJECT: {project_client}")
-else:
-    print("Failed to create project client.")
-    sys.exit()
-
-# Get Function connection
-try:
-    function_connection = project_client.connections.get(function_connection_name)
-except Exception as e:
-    print(f"Error: failed to get Function connection '{function_connection_name}': {e}")
-    print(
-        "\nHow to fix:\n"
-        "1) In Microsoft Foundry, open your AI Project -> Connected resources.\n"
-        "2) Click 'Add connection'.\n"
-        "3) Choose 'Custom keys'.\n"
-        "4) Add a key named 'x-functions-key' with value from your Function App -> App keys -> 'default'.\n"
-        "   (Mark it as secret.)\n"
-        f"5) Set Connection Name to '{function_connection_name}'.\n"
-        "6) Re-run this script.\n"
-        "\nAlternatively, set FUNCTION_PROJECT_CONNECTION_NAME to the name of an existing CustomKeys connection.\n"
-    )
-    sys.exit()
-
-print(f"Using Function connection: {function_connection.name} (ID: {function_connection.id})")
-
-openapi_spec_path = os.path.join(os.path.dirname(__file__), "assets", "function_openapi.json")
-function_tool = build_insurance_functions_tool(
-    function_base_url=function_base_url,
-    function_connection_id=function_connection.id,
-    openapi_spec_path=openapi_spec_path,
-)
 
 # Agent instructions with product filtering guidance
-agent_instructions = """
+AGENT_INSTRUCTIONS = """
 Jesteś asystentem dla agenta ubezpieczeniowego. Masz dostęp do informacji o różnych produktach ubezpieczeniowych poprzez dwa narzędzia.
 
 Zanim odpowiesz merytorycznie na pytanie, MUSISZ najpierw jednoznacznie ustalić, którego produktu dotyczy pytanie.
@@ -101,13 +59,16 @@ Jak pracujesz (flow):
     Możesz też zaproponować użytkownikowi wyświetlenie listy produktów, o których posiadasz informacje.
 
 2) Interpretacja wyniku list_products:
-    - 0 produktów: poinformuj, że nie znaleziono pasujących produktów i poproś o doprecyzowanie (typ, data, nazwa).
+    - Dokładnie 1 produkt: zapamiętaj jego product_id i posługuj się nim w kolejnych krokach.
      - >1 produktu: pokaż krótką, czytelną listę opcji w formie numerowanej (1, 2, 3, ...).
          Przy każdej pozycji pokaż minimum: product_name, product_version_no, product_type, date_from–date_to oraz product_id.
          Następnie poproś użytkownika o wybór poprzez wpisanie samego numeru (np. "1" albo "2").
          Jeśli użytkownik odpowie numerem, wybierz odpowiadającą pozycję z ostatnio pokazanej listy i użyj jej product_id.
          W tym stanie (dopóki nie ma jednoznacznego wyboru) NIE WOLNO wyszukiwać chunków.
-    - Dokładnie 1 produkt: zapamiętaj jego product_id i posługuj się nim w kolejnych krokach.
+    - 0 produktów: pobierz ponownie listę produktów z żadnymi filtrami i spróbuj zidentyfikować produkt na podstawie nazwy/wersji.
+            Jeśli nadal 0 produktów, poinformuj, że nie znaleziono pasujących produktów i poproś o doprecyzowanie (typ, data, nazwa). 
+            Wyraźnie poinformuj, że możesz wyświetlić listę dostępnych produktów.
+
 
 3) Dopiero gdy product_id jest jednoznaczny i użytkownik zadaje pytanie merytoryczne (warunki, zakres, wyłączenia, definicje, procedury),
     wywołaj insurance_functions.search_chunks.
@@ -118,13 +79,76 @@ Zasady odpowiedzi:
 - Dodawaj cytowania jako wskazanie źródła (np. metadata_storage_name / metadata_storage_path), jeśli są dostępne.
 """
 
-# Create an agent with knowledge access
-agent = project_client.agents.create_version(
-    agent_name="insurance-product-agent",
-    definition=PromptAgentDefinition(
-        model="gpt-4o",
-        instructions=agent_instructions,
-        tools=[function_tool]
+
+def main() -> None:
+    """Create a new agent version in the configured AI Project."""
+
+    load_dotenv()
+
+    function_base_url = _require_env(
+        "FUNCTION_BASE_URL",
+        "Please set FUNCTION_BASE_URL (e.g. https://<your-functionapp>.azurewebsites.net).",
     )
-)
-print(f"Created agent: {agent.name} (version: {agent.version})")
+    project_endpoint = _require_env(
+        "AI_SERVICE_PROJECT_ENDPOINT",
+        "Please set the AI_SERVICE_PROJECT_ENDPOINT environment variable.",
+    )
+
+    function_connection_name = (
+        os.getenv("FUNCTION_PROJECT_CONNECTION_NAME")
+        or DEFAULT_FUNCTION_PROJECT_CONNECTION_NAME
+    )
+    agent_name = os.getenv("AI_AGENT_NAME")
+
+    print(f"Project Endpoint: {project_endpoint}")
+    if not os.getenv("FUNCTION_PROJECT_CONNECTION_NAME"):
+        print(
+            "FUNCTION_PROJECT_CONNECTION_NAME not set; using default: "
+            f"{DEFAULT_FUNCTION_PROJECT_CONNECTION_NAME}"
+        )
+
+    credential = DefaultAzureCredential(
+        exclude_environment_credential=True,
+        exclude_managed_identity_credential=True,
+    )
+    project_client = AIProjectClient(endpoint=project_endpoint, credential=credential)
+    if project_client:
+        print(f"PROJECT: {project_client}")
+    else:
+        print("Failed to create project client.")
+        sys.exit(1)
+
+    try:
+        function_connection = project_client.connections.get(function_connection_name)
+    except Exception as e:
+        print(
+            f"Error: failed to get Function connection '{function_connection_name}': {e}"
+        )
+        sys.exit(1)
+
+    print(
+        f"Using Function connection: {function_connection.name} (ID: {function_connection.id})"
+    )
+
+    openapi_spec_path = os.path.join(
+        os.path.dirname(__file__), "assets", "function_openapi.json"
+    )
+    function_tool = build_insurance_functions_tool(
+        function_base_url=function_base_url,
+        function_connection_id=function_connection.id,
+        openapi_spec_path=openapi_spec_path,
+    )
+
+    agent = project_client.agents.create_version(
+        agent_name=agent_name,
+        definition=PromptAgentDefinition(
+            model="gpt-4o",
+            instructions=AGENT_INSTRUCTIONS,
+            tools=[function_tool],
+        ),
+    )
+    print(f"Created agent: {agent.name} (version: {agent.version})")
+
+
+if __name__ == "__main__":
+    main()

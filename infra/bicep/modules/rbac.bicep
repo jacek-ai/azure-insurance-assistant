@@ -88,12 +88,12 @@ resource searchToOpenAI 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 /*
-  RBAC: Allow logged-in user to manage Azure AI Foundry resources from code (e.g., agents, projects, connections)
+  RBAC: Allow logged-in user to manage Azure AI Foundry resources from code
   Role: Azure AI Owner
 */
 resource userAiOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(aiProject.id, userObjectId, roleAzureAIOwner)
-  scope: aiProject
+  name: guid(aiFoundry.id, userObjectId, roleAzureAIOwner)
+  scope: aiFoundry
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleAzureAIOwner)
     principalId: userObjectId

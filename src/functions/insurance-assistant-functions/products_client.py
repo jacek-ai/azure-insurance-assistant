@@ -1,3 +1,9 @@
+"""Product catalog client.
+
+Downloads the product list from Blob Storage and applies simple filters.
+Authentication is done via `DefaultAzureCredential` (Managed Identity in Azure).
+"""
+
 import json
 import os
 from datetime import date
@@ -8,11 +14,16 @@ from azure.storage.blob import BlobServiceClient
 
 
 def _parse_iso_date(value: str) -> date:
-    # Expect YYYY-MM-DD (ISO 8601). Raises ValueError on invalid input.
+    """Parse ISO date in the form YYYY-MM-DD.
+
+    Raises:
+        ValueError: If the input is not a valid ISO date.
+    """
     return date.fromisoformat(value)
 
 
 def _is_product_active_on(product: Dict[str, Any], as_of: date) -> bool:
+    """Return True if a product is active on the given date."""
     date_from_raw = (product.get("date_from") or "").strip()
     date_to_raw = (product.get("date_to") or "").strip()
 
@@ -29,6 +40,13 @@ def _is_product_active_on(product: Dict[str, Any], as_of: date) -> bool:
 
 
 def _download_products_json() -> Dict[str, Any]:
+    """Download and parse the products JSON blob.
+
+    Expected env:
+        - BLOB_ACCOUNT_URL: https://<account>.blob.core.windows.net
+        - PRODUCTS_CONTAINER_NAME (optional)
+        - PRODUCTS_BLOB_NAME (optional)
+    """
     account_url = os.getenv("BLOB_ACCOUNT_URL")
 
     container_name = os.getenv("PRODUCTS_CONTAINER_NAME", "products")
@@ -56,6 +74,12 @@ def list_products(
     product_type: Optional[str] = None,
     as_of_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """List products, optionally filtering by type and/or effective date.
+
+    Args:
+        product_type: Exact match (case-insensitive).
+        as_of_date: ISO date (YYYY-MM-DD). Returns products active on that date.
+    """
     payload = _download_products_json()
 
     products = payload.get("Products")
