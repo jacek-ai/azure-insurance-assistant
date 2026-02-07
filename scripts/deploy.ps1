@@ -153,23 +153,6 @@ if (Test-Path $bicepParamFile) {
       throw "Failed to compile params file: $bicepParamFile"
     }
 
-    # If FUNCTION_X_FUNCTIONS_KEY is supplied via environment (common in CI), ensure the compiled
-    # parameters file does not also provide functionXFunctionsKey. Some Azure CLI parameter parsing
-    # scenarios may prefer the file value over an inline value when both are present.
-    if (-not [string]::IsNullOrWhiteSpace($functionKey)) {
-      try {
-        $paramsObj = Get-Content -Raw -Path $compiledParams | ConvertFrom-Json
-        if ($null -ne $paramsObj.parameters.functionXFunctionsKey) {
-          $paramsObj.parameters.PSObject.Properties.Remove('functionXFunctionsKey')
-          $paramsObj | ConvertTo-Json -Depth 50 | Set-Content -Path $compiledParams -Encoding UTF8
-          Write-Host 'Note: removed functionXFunctionsKey from compiled params file (using env var instead).' -ForegroundColor DarkGray
-        }
-      }
-      catch {
-        Write-Host 'Warning: failed to sanitize compiled params file; continuing anyway.' -ForegroundColor Yellow
-      }
-    }
-
     if ([string]::IsNullOrWhiteSpace($functionKey)) {
       Write-Host 'Bicep deployment parameters: compiled params + userObjectId + userPrincipalType (no functionXFunctionsKey).' -ForegroundColor DarkGray
       Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
@@ -195,25 +178,19 @@ if (Test-Path $bicepParamFile) {
   }
 }
 else {
-  Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
-    "userObjectId=$userOid",
-    "userPrincipalType=$userPrincipalType"
-  )
-}
-
-try {
-  $outputsJson = az deployment group show -g $rg -n "deployment-ins-assistant" --query "properties.outputs" -o json 2>$null
-  if (-not [string]::IsNullOrWhiteSpace($outputsJson)) {
-    $outputs = $outputsJson | ConvertFrom-Json
-    Write-Host "Deployment outputs (debug):" -ForegroundColor DarkGray
-    if ($null -ne $outputs.functionKeyProvided) { Write-Host ("- functionKeyProvided: {0}" -f $outputs.functionKeyProvided.value) -ForegroundColor DarkGray }
-    if ($null -ne $outputs.willRunFunctionHostKeySetter) { Write-Host ("- willRunFunctionHostKeySetter: {0}" -f $outputs.willRunFunctionHostKeySetter.value) -ForegroundColor DarkGray }
-    if ($null -ne $outputs.willCreateFunctionProjectConnection) { Write-Host ("- willCreateFunctionProjectConnection: {0}" -f $outputs.willCreateFunctionProjectConnection.value) -ForegroundColor DarkGray }
-    if ($null -ne $outputs.willCreateKeyVaultSecret) { Write-Host ("- willCreateKeyVaultSecret: {0}" -f $outputs.willCreateKeyVaultSecret.value) -ForegroundColor DarkGray }
+  if ([string]::IsNullOrWhiteSpace($functionKey)) {
+    Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+      "userObjectId=$userOid",
+      "userPrincipalType=$userPrincipalType"
+    )
   }
-}
-catch {
-  Write-Host "Warning: failed to read deployment outputs for debug." -ForegroundColor Yellow
+  else {
+    Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+      "userObjectId=$userOid",
+      "userPrincipalType=$userPrincipalType",
+      "functionXFunctionsKey=$functionKey"
+    )
+  }
 }
 
 Write-Host "`nDone."
