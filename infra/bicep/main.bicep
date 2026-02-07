@@ -272,3 +272,19 @@ module rbac 'modules/rbac.bicep' = {
     storage
   ]
 }
+
+@description('True when functionXFunctionsKey was provided (non-empty) during deployment.')
+#disable-next-line outputs-should-not-contain-secrets
+output functionKeyProvided bool = !empty(functionXFunctionsKey)
+
+@description('True when the deployment would create/run the Function host-key setter script resource.')
+#disable-next-line outputs-should-not-contain-secrets
+output willRunFunctionHostKeySetter bool = !empty(functionXFunctionsKey)
+
+@description('True when the Foundry Project connection resource would be created/updated.')
+#disable-next-line outputs-should-not-contain-secrets
+output willCreateFunctionProjectConnection bool = !empty(functionXFunctionsKey)
+
+@description('True when Key Vault secret creation is enabled and function key is provided.')
+#disable-next-line outputs-should-not-contain-secrets
+output willCreateKeyVaultSecret bool = createKeyVault && !empty(keyVaultName) && !empty(functionXFunctionsKey)

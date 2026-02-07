@@ -184,4 +184,19 @@ else {
   )
 }
 
+try {
+  $outputsJson = az deployment group show -g $rg -n "deployment-ins-assistant" --query "properties.outputs" -o json 2>$null
+  if (-not [string]::IsNullOrWhiteSpace($outputsJson)) {
+    $outputs = $outputsJson | ConvertFrom-Json
+    Write-Host "Deployment outputs (debug):" -ForegroundColor DarkGray
+    if ($null -ne $outputs.functionKeyProvided) { Write-Host ("- functionKeyProvided: {0}" -f $outputs.functionKeyProvided.value) -ForegroundColor DarkGray }
+    if ($null -ne $outputs.willRunFunctionHostKeySetter) { Write-Host ("- willRunFunctionHostKeySetter: {0}" -f $outputs.willRunFunctionHostKeySetter.value) -ForegroundColor DarkGray }
+    if ($null -ne $outputs.willCreateFunctionProjectConnection) { Write-Host ("- willCreateFunctionProjectConnection: {0}" -f $outputs.willCreateFunctionProjectConnection.value) -ForegroundColor DarkGray }
+    if ($null -ne $outputs.willCreateKeyVaultSecret) { Write-Host ("- willCreateKeyVaultSecret: {0}" -f $outputs.willCreateKeyVaultSecret.value) -ForegroundColor DarkGray }
+  }
+}
+catch {
+  Write-Host "Warning: failed to read deployment outputs for debug." -ForegroundColor Yellow
+}
+
 Write-Host "`nDone."
