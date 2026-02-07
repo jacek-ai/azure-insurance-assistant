@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "6850960517294026617"
+      "templateHash": "4337732408710349561"
     }
   },
   "parameters": {
@@ -68,6 +68,17 @@
         "description": "Location of all resources"
       }
     },
+    "aiFoundryPublicNetworkAccess": {
+      "type": "string",
+      "defaultValue": "Enabled",
+      "allowedValues": [
+        "Enabled",
+        "Disabled"
+      ],
+      "metadata": {
+        "description": "Public network access setting for the AI Foundry account. Some tenants/policies require this to be set explicitly."
+      }
+    },
     "searchIndexName": {
       "type": "string",
       "defaultValue": "knowledgesource-index",
@@ -114,6 +125,7 @@
       "properties": {
         "allowProjectManagement": true,
         "customSubDomainName": "[variables('aiFoundryName')]",
+        "publicNetworkAccess": "[parameters('aiFoundryPublicNetworkAccess')]",
         "disableLocalAuth": true
       }
     },
@@ -442,7 +454,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "8385803691480886023"
+              "templateHash": "12522634919116932856"
             }
           },
           "parameters": {
@@ -500,7 +512,8 @@
             }
           },
           "variables": {
-            "blobAccountUrl": "[format('https://{0}.blob.{1}', parameters('storageAccountName'), environment().suffixes.storage)]"
+            "blobAccountUrl": "[format('https://{0}.blob.{1}', parameters('storageAccountName'), environment().suffixes.storage)]",
+            "contentShareName": "[toLower(format('content-{0}', uniqueString(resourceGroup().id, parameters('functionAppName'))))]"
           },
           "resources": [
             {
@@ -538,6 +551,14 @@
                     {
                       "name": "AzureWebJobsStorage",
                       "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                      "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "WEBSITE_CONTENTSHARE",
+                      "value": "[variables('contentShareName')]"
                     },
                     {
                       "name": "FUNCTIONS_WORKER_RUNTIME",

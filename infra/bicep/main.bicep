@@ -27,6 +27,13 @@ param keyVaultFunctionKeySecretName string = 'functions-host-key-default'
 @description('Location of all resources')
 param location string = resourceGroup().location
 
+@allowed([
+  'Enabled'
+  'Disabled'
+])
+@description('Public network access setting for the AI Foundry account. Some tenants/policies require this to be set explicitly.')
+param aiFoundryPublicNetworkAccess string = 'Enabled'
+
 @description('Azure AI Search index name used by the Functions tool (RAG retrieval)')
 param searchIndexName string = 'knowledgesource-index'
 
@@ -62,6 +69,9 @@ resource aiFoundry 'Microsoft.CognitiveServices/accounts@2025-04-01-preview' = {
 
     // Defines developer API endpoint subdomain
     customSubDomainName: aiFoundryName
+
+    // Explicitly set to avoid BadRequest on updates in some environments.
+    publicNetworkAccess: aiFoundryPublicNetworkAccess
 
     disableLocalAuth: true
   }
