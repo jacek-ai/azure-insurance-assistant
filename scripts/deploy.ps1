@@ -29,6 +29,61 @@ if (-not (Test-Path $bicepFile)) {
 
 Assert-AzCliLoggedIn
 
+function Invoke-AzGroupDeploymentWithRetry {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $ResourceGroup,
+
+    [Parameter(Mandatory = $true)]
+    [string] $DeploymentName,
+
+    [Parameter(Mandatory = $true)]
+    [string] $TemplateFile,
+
+    [Parameter(Mandatory = $true)]
+    [string[]] $Parameters
+  )
+
+  $maxAttempts = 10
+  $delaySeconds = 45
+
+  if (-not [string]::IsNullOrWhiteSpace($env:DEPLOY_RETRY_MAX_ATTEMPTS)) {
+    [void][int]::TryParse($env:DEPLOY_RETRY_MAX_ATTEMPTS, [ref] $maxAttempts)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:DEPLOY_RETRY_DELAY_SECONDS)) {
+    [void][int]::TryParse($env:DEPLOY_RETRY_DELAY_SECONDS, [ref] $delaySeconds)
+  }
+
+  for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    Write-Host "Running ARM deployment (attempt $attempt/$maxAttempts)..." -ForegroundColor Cyan
+
+    $output = & az deployment group create `
+      -g $ResourceGroup `
+      -n $DeploymentName `
+      -f $TemplateFile `
+      -p @Parameters 2>&1
+
+    if ($LASTEXITCODE -eq 0) {
+      return
+    }
+
+    $outputText = ($output | Out-String)
+    $isProvisioningConflict = (
+      $outputText -match 'RequestConflict' -and
+      $outputText -match 'provisioning state is not terminal'
+    )
+
+    if ($isProvisioningConflict -and $attempt -lt $maxAttempts) {
+      Write-Host "Deployment hit a provisioning conflict (resource not in terminal state). Waiting ${delaySeconds}s then retrying..." -ForegroundColor Yellow
+      Start-Sleep -Seconds $delaySeconds
+      continue
+    }
+
+    throw "Deployment failed. Azure CLI output:\n$outputText"
+  }
+}
+
 $userOid = $env:USER_OBJECT_ID
 $userPrincipalType = ''
 if ([string]::IsNullOrWhiteSpace($userOid)) {
@@ -92,20 +147,19 @@ if (Test-Path $bicepParamFile) {
     }
 
     if ([string]::IsNullOrWhiteSpace($functionKey)) {
-      az deployment group create `
-        -g $rg `
-        -n "deployment-ins-assistant" `
-        -f $bicepFile `
-        -p @$compiledParams userObjectId=$userOid userPrincipalType=$userPrincipalType
-      if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
+      Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+        "@$compiledParams",
+        "userObjectId=$userOid",
+        "userPrincipalType=$userPrincipalType"
+      )
     }
     else {
-      az deployment group create `
-        -g $rg `
-        -n "deployment-ins-assistant" `
-        -f $bicepFile `
-        -p @$compiledParams userObjectId=$userOid userPrincipalType=$userPrincipalType functionXFunctionsKey=$functionKey
-      if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
+      Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+        "@$compiledParams",
+        "userObjectId=$userOid",
+        "userPrincipalType=$userPrincipalType",
+        "functionXFunctionsKey=$functionKey"
+      )
     }
   }
   finally {
@@ -115,12 +169,10 @@ if (Test-Path $bicepParamFile) {
   }
 }
 else {
-  az deployment group create `
-    -g $rg `
-    -n "deployment-ins-assistant" `
-    -f $bicepFile `
-    -p userObjectId=$userOid userPrincipalType=$userPrincipalType
-  if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
+  Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+    "userObjectId=$userOid",
+    "userPrincipalType=$userPrincipalType"
+  )
 }
 
 Write-Host "`nDone."
