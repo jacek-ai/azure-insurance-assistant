@@ -1,0 +1,172 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.40.2.10011",
+      "templateHash": "12522634919116932856"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure region"
+      }
+    },
+    "functionAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "Function App name"
+      }
+    },
+    "storageAccountName": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account name used for AzureWebJobsStorage"
+      }
+    },
+    "searchServiceEndpoint": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure AI Search endpoint (e.g. https://<service>.search.windows.net)"
+      }
+    },
+    "searchIndexName": {
+      "type": "string",
+      "defaultValue": "knowledgesource-index",
+      "metadata": {
+        "description": "Azure AI Search index name used for RAG retrieval"
+      }
+    },
+    "productsContainerName": {
+      "type": "string",
+      "defaultValue": "products",
+      "metadata": {
+        "description": "Blob container name holding the product catalog"
+      }
+    },
+    "productsBlobName": {
+      "type": "string",
+      "defaultValue": "products.json",
+      "metadata": {
+        "description": "Blob name of the product catalog JSON"
+      }
+    },
+    "pythonVersion": {
+      "type": "string",
+      "defaultValue": "3.11",
+      "metadata": {
+        "description": "Python runtime version for Linux Functions"
+      }
+    }
+  },
+  "variables": {
+    "blobAccountUrl": "[format('https://{0}.blob.{1}', parameters('storageAccountName'), environment().suffixes.storage)]",
+    "contentShareName": "[toLower(format('content-{0}', uniqueString(resourceGroup().id, parameters('functionAppName'))))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2022-09-01",
+      "name": "[format('{0}-plan', parameters('functionAppName'))]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp",
+      "sku": {
+        "name": "Y1",
+        "tier": "Dynamic"
+      },
+      "properties": {
+        "reserved": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-09-01",
+      "name": "[parameters('functionAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "functionapp,linux",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "httpsOnly": true,
+        "clientAffinityEnabled": false,
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('functionAppName')))]",
+        "siteConfig": {
+          "linuxFxVersion": "[format('Python|{0}', parameters('pythonVersion'))]",
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "appSettings": [
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+            },
+            {
+              "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+            },
+            {
+              "name": "WEBSITE_CONTENTSHARE",
+              "value": "[variables('contentShareName')]"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "python"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~4"
+            },
+            {
+              "name": "WEBSITE_RUN_FROM_PACKAGE",
+              "value": "1"
+            },
+            {
+              "name": "SEARCH_SERVICE_ENDPOINT",
+              "value": "[parameters('searchServiceEndpoint')]"
+            },
+            {
+              "name": "SEARCH_INDEX_NAME",
+              "value": "[parameters('searchIndexName')]"
+            },
+            {
+              "name": "BLOB_ACCOUNT_URL",
+              "value": "[variables('blobAccountUrl')]"
+            },
+            {
+              "name": "PRODUCTS_CONTAINER_NAME",
+              "value": "[parameters('productsContainerName')]"
+            },
+            {
+              "name": "PRODUCTS_BLOB_NAME",
+              "value": "[parameters('productsBlobName')]"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', format('{0}-plan', parameters('functionAppName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "functionAppId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Web/sites', parameters('functionAppName'))]"
+    },
+    "functionAppName": {
+      "type": "string",
+      "value": "[parameters('functionAppName')]"
+    },
+    "functionAppPrincipalId": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01', 'full').identity.principalId]"
+    },
+    "functionAppDefaultHostname": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Web/sites', parameters('functionAppName')), '2022-09-01').defaultHostName]"
+    }
+  }
+}

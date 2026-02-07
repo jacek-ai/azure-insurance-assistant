@@ -28,6 +28,10 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' existing 
 
 var blobAccountUrl = 'https://${storageAccountName}.blob.${environment().suffixes.storage}'
 
+// Required by Kudu/zipdeploy for mounting the content share.
+// Must be 3-63 chars, lowercase letters/numbers/hyphens.
+var contentShareName = toLower('content-${uniqueString(resourceGroup().id, functionAppName)}')
+
 var storageKey = storageAccount.listKeys().keys[0].value
 var storageConnectionString = 'DefaultEndpointsProtocol=https;AccountName=${storageAccount.name};AccountKey=${storageKey};EndpointSuffix=${environment().suffixes.storage}'
 
@@ -63,6 +67,14 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
         {
           name: 'AzureWebJobsStorage'
           value: storageConnectionString
+        }
+        {
+          name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
+          value: storageConnectionString
+        }
+        {
+          name: 'WEBSITE_CONTENTSHARE'
+          value: contentShareName
         }
         {
           name: 'FUNCTIONS_WORKER_RUNTIME'

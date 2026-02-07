@@ -52,7 +52,7 @@ try {
     if ($BuildRemote) {
         & func azure functionapp publish $FunctionAppName --python --build remote
     } else {
-        & func azure functionapp publish $FunctionAppName --python
+        & func azure functionapp publish $FunctionAppName --python --build local
     }
 } finally {
     Pop-Location
