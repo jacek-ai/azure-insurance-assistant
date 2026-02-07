@@ -58,6 +58,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Validate Azure OIDC secrets
         shell: pwsh
         env:
@@ -89,7 +94,9 @@ jobs:
       - name: Install Azure Functions Core Tools
         shell: pwsh
         run: |
-          choco install azure-functions-core-tools-4 --no-progress -y
+          node --version
+          npm --version
+          npm install -g azure-functions-core-tools@4
           func --version
 
       - name: Deploy infra (Bicep)
