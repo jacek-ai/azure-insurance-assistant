@@ -50,9 +50,9 @@ Write-Host "Publishing to Function App: $FunctionAppName" -ForegroundColor Cyan
 Push-Location $functionProjectPath
 try {
     if ($BuildRemote) {
-        & func azure functionapp publish $FunctionAppName --build remote
+        & func azure functionapp publish $FunctionAppName --python --build remote
     } else {
-        & func azure functionapp publish $FunctionAppName
+        & func azure functionapp publish $FunctionAppName --python
     }
 } finally {
     Pop-Location
