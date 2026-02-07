@@ -62,6 +62,49 @@ function Assert-NotEmpty([string]$Value, [string]$Name) {
 
 Assert-AzCliLoggedIn
 
+function Get-AzCliValue {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    [string[]] $Args,
+
+    [int] $MaxAttempts = 6,
+    [int] $DelaySeconds = 5,
+
+    [string] $What = 'Azure CLI command'
+  )
+
+  for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+    $output = & az @Args 2>&1
+    $text = ($output | Out-String).Trim()
+
+    if ($LASTEXITCODE -eq 0) {
+      return $text
+    }
+
+    $isTransientNetwork = (
+      $text -match 'getaddrinfo failed' -or
+      $text -match 'Failed to resolve' -or
+      $text -match 'Name or service not known' -or
+      $text -match 'Temporary failure in name resolution' -or
+      $text -match 'ConnectionError' -or
+      $text -match 'HTTPSConnection' -or
+      $text -match 'Read timed out' -or
+      $text -match 'ConnectTimeout'
+    )
+
+    if ($isTransientNetwork -and $attempt -lt $MaxAttempts) {
+      Write-Host ("Warning: $What failed due to a transient network/DNS error (attempt $attempt/$MaxAttempts). Retrying in ${DelaySeconds}s...") -ForegroundColor Yellow
+      Start-Sleep -Seconds $DelaySeconds
+      continue
+    }
+
+    throw "$What failed. Azure CLI output:\n$text"
+  }
+
+  throw "$What failed after $MaxAttempts attempts."
+}
+
 $expectedKey = $env:FUNCTION_X_FUNCTIONS_KEY
 
 Write-Host '--- Verifying Function App key (default) ---'
@@ -90,13 +133,25 @@ if (-not $SkipKeyVault) {
   Assert-NotEmpty $KeyVaultSecretName 'KeyVaultSecretName'
 
   # Ensure secret exists
-  $null = az keyvault secret show --vault-name $KeyVaultName --name $KeyVaultSecretName --query 'id' -o tsv
+  $null = Get-AzCliValue -What 'Key Vault secret existence check' -Args @(
+    'keyvault','secret','show',
+    '--vault-name', $KeyVaultName,
+    '--name', $KeyVaultSecretName,
+    '--query', 'id',
+    '-o', 'tsv'
+  )
   Write-Host "OK: Key Vault secret exists ($KeyVaultName / $KeyVaultSecretName)."
 
   if (-not [string]::IsNullOrWhiteSpace($expectedKey)) {
-    $kvValue = az keyvault secret show --vault-name $KeyVaultName --name $KeyVaultSecretName --query 'value' -o tsv
+    $kvValue = Get-AzCliValue -What 'Key Vault secret value read' -Args @(
+      'keyvault','secret','show',
+      '--vault-name', $KeyVaultName,
+      '--name', $KeyVaultSecretName,
+      '--query', 'value',
+      '-o', 'tsv'
+    )
     if ([string]::IsNullOrWhiteSpace($kvValue)) {
-      throw 'Key Vault secret value is empty.'
+      throw 'Key Vault secret value is empty (or could not be read).'
     }
     if ($kvValue -ne $expectedKey) {
       throw 'Mismatch: Key Vault secret value does not match FUNCTION_X_FUNCTIONS_KEY.'
