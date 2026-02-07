@@ -131,6 +131,13 @@ if ([string]::IsNullOrWhiteSpace($userOid)) {
 
 $functionKey = $env:FUNCTION_X_FUNCTIONS_KEY
 
+if ([string]::IsNullOrWhiteSpace($functionKey)) {
+  Write-Host 'FUNCTION_X_FUNCTIONS_KEY is not set (or empty). Deploying WITHOUT functionXFunctionsKey.' -ForegroundColor Yellow
+}
+else {
+  Write-Host ("FUNCTION_X_FUNCTIONS_KEY is set. Deploying WITH functionXFunctionsKey (length: {0})." -f $functionKey.Length) -ForegroundColor Cyan
+}
+
 az group create -n $rg -l $loc | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "Failed to create or access resource group '$rg'."
@@ -147,6 +154,7 @@ if (Test-Path $bicepParamFile) {
     }
 
     if ([string]::IsNullOrWhiteSpace($functionKey)) {
+      Write-Host 'Bicep deployment parameters: compiled params + userObjectId + userPrincipalType (no functionXFunctionsKey).' -ForegroundColor DarkGray
       Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
         "@$compiledParams",
         "userObjectId=$userOid",
@@ -154,6 +162,7 @@ if (Test-Path $bicepParamFile) {
       )
     }
     else {
+      Write-Host 'Bicep deployment parameters: compiled params + userObjectId + userPrincipalType + functionXFunctionsKey.' -ForegroundColor DarkGray
       Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
         "@$compiledParams",
         "userObjectId=$userOid",
