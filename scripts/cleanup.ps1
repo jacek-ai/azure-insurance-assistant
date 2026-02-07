@@ -24,7 +24,7 @@ $keyVaultName = if (-not [string]::IsNullOrWhiteSpace($env:KEYVAULT_NAME)) { $en
 
 $namePrefix = if (-not [string]::IsNullOrWhiteSpace($env:RESOURCE_NAME_PREFIX)) { $env:RESOURCE_NAME_PREFIX } else { "insast-dev-" }
 
-# Deleting without question
+# Forse deleting without question
 $forceDeleteRg = $false
 
 Write-Host "=== Key Vault cleanup (safe: exact name match only) ==="

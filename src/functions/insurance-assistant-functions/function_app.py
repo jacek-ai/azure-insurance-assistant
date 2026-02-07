@@ -65,7 +65,10 @@ def search_chunks_endpoint(req: func.HttpRequest) -> func.HttpResponse:
 def products_endpoint(req: func.HttpRequest) -> func.HttpResponse:
     """List products from the catalog (optionally filtered).
 
-    Accepts optional JSON body: { product_type?: str, date?: YYYY-MM-DD }.
+        Accepts optional JSON body:
+            - product?: str (free-text hint, e.g. "Wojażer 2025" or "Auto 26-01-2025")
+            - date?: YYYY-MM-DD (effective date)
+            - product_type?: str (legacy exact filter; still supported)
     """
 
     def ok_json(payload: dict) -> func.HttpResponse:
@@ -82,11 +85,12 @@ def products_endpoint(req: func.HttpRequest) -> func.HttpResponse:
         # Treat invalid JSON as "no filters" for this endpoint.
         body = {}
 
+    product = (body or {}).get("product")
     product_type = (body or {}).get("product_type")
     as_of_date = (body or {}).get("date")
 
     try:
-        products = list_products(product_type=product_type, as_of_date=as_of_date)
+        products = list_products(product=product, product_type=product_type, as_of_date=as_of_date)
     except ValueError as e:
         return ok_json({"products": [], "error": f"Invalid input: {e}"})
     except Exception as e:

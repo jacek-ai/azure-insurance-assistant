@@ -73,7 +73,7 @@ def test_search_chunks_endpoint_happy_path(monkeypatch: pytest.MonkeyPatch) -> N
 def test_products_endpoint_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(function_app, "list_products", lambda **kwargs: [{"product_id": "a"}])
 
-    resp = function_app.products_endpoint(FakeReq({"product_type": "home", "date": "2024-01-01"}))
+    resp = function_app.products_endpoint(FakeReq({"product": "Wojażer 2025", "date": "2024-01-01"}))
     body = _body_json(resp)
     assert body["error"] is None
     assert body["products"] == [{"product_id": "a"}]

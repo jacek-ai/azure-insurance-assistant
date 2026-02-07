@@ -95,7 +95,7 @@
       "post": {
         "operationId": "list_products",
         "summary": "List products",
-        "description": "Returns the product list from Blob Storage, optionally filtered by product_type and/or an effective date.",
+        "description": "Returns the product list from Blob Storage. Optionally uses a free-text product hint (with best-effort date extraction) and/or an explicit effective date.",
         "security": [
           {
             "functionKey": []
@@ -108,9 +108,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "product": {
+                    "type": "string",
+                    "description": "Optional free-text product hint, e.g. 'Produkt Wojażer 2025' or 'Twoje auto 26-01-2025'. The service will fuzzy-match it against product_name/type/description and extract a date if present."
+                  },
                   "product_type": {
                     "type": "string",
-                    "description": "Optional product type filter (exact match, case-insensitive)"
+                    "description": "Legacy product type filter (exact match, case-insensitive). Prefer using 'product' instead.",
+                    "deprecated": true
                   },
                   "date": {
                     "type": "string",

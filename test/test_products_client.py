@@ -82,6 +82,63 @@ def test_list_products_filters_by_type_and_date(monkeypatch: pytest.MonkeyPatch)
     assert [p["product_id"] for p in as_of] == ["a"]
 
 
+def test_list_products_free_text_extracts_date_and_filters(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "Products": [
+            {
+                "product_id": "wojazer-2025",
+                "product_name": "Ubezpieczenie turystyczne Wojażer",
+                "product_type": "Turystyczne",
+                "product_description": "Wojażer v1",
+                "date_from": "2025-01-01",
+                "date_to": "2025-12-31",
+            },
+            {
+                "product_id": "wojazer-2026",
+                "product_name": "Ubezpieczenie turystyczne Wojażer",
+                "product_type": "Turystyczne",
+                "product_description": "Wojażer v2",
+                "date_from": "2026-01-01",
+                "date_to": "",
+            },
+        ]
+    }
+
+    monkeypatch.setattr(products_client, "_download_products_json", lambda: payload)
+
+    # Date is provided in DD-MM-YYYY form inside the free-text hint.
+    res = products_client.list_products(product="Wojażer 26-01-2025")
+    assert [p["product_id"] for p in res] == ["wojazer-2025"]
+
+
+def test_list_products_free_text_fuzzy_ranks_best_match_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {
+        "Products": [
+            {
+                "product_id": "auto",
+                "product_name": "Ubezpieczenie komunikacyjne Auto",
+                "product_type": "Komunikacyjne",
+                "product_description": "Auto",
+                "date_from": "2024-01-01",
+                "date_to": "",
+            },
+            {
+                "product_id": "travel",
+                "product_name": "Ubezpieczenie turystyczne Wojażer",
+                "product_type": "Turystyczne",
+                "product_description": "Wojażer",
+                "date_from": "2024-01-01",
+                "date_to": "",
+            },
+        ]
+    }
+
+    monkeypatch.setattr(products_client, "_download_products_json", lambda: payload)
+
+    res = products_client.list_products(product="ubezpieczenie wojazer")
+    assert res[0]["product_id"] == "travel"
+
+
 def test_list_products_invalid_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(products_client, "_download_products_json", lambda: {"Products": "nope"})
     with pytest.raises(RuntimeError, match="Products"):
