@@ -1,6 +1,13 @@
 @description('ObjectId logged in user (Entra ID)')
 param userObjectId string
 
+@allowed([
+  'User'
+  'ServicePrincipal'
+])
+@description('Principal type for userObjectId. Use User for interactive deployments, ServicePrincipal for CI/OIDC.')
+param userPrincipalType string = 'User'
+
 @secure()
 @description('Azure Functions host key value to store in the AI Foundry Project connection as x-functions-key. Leave empty to skip creating the connection.')
 param functionXFunctionsKey string = ''
@@ -239,6 +246,7 @@ module rbac 'modules/rbac.bicep' = {
   name: 'rbac'
   params: {
     userObjectId: userObjectId
+    userPrincipalType: userPrincipalType
     searchServiceName: searchName
     searchServicePrincipalId: searchService.identity.principalId
     aiFoundryName: aiFoundryName

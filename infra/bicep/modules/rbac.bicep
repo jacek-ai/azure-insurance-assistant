@@ -1,6 +1,13 @@
 @description('ObjectId logged in user (Entra ID)')
 param userObjectId string
 
+@allowed([
+  'User'
+  'ServicePrincipal'
+])
+@description('Principal type for userObjectId. Use User for interactive deployments, ServicePrincipal for CI/OIDC.')
+param userPrincipalType string = 'User'
+
 @description('Name of the Azure AI Search service')
 param searchServiceName string
 
@@ -97,7 +104,7 @@ resource userAiOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleAzureAIOwner)
     principalId: userObjectId
-    principalType: 'User'
+    principalType: userPrincipalType
   }
 }
 
@@ -111,7 +118,7 @@ resource userSearchIndexContributor 'Microsoft.Authorization/roleAssignments@202
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchIndexDataContributor)
     principalId: userObjectId
-    principalType: 'User'
+    principalType: userPrincipalType
   }
 }
 
@@ -125,7 +132,7 @@ resource userSearchIndexReader 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchIndexDataReader)
     principalId: userObjectId
-    principalType: 'User'
+    principalType: userPrincipalType
   }
 }
 
@@ -139,7 +146,7 @@ resource userSearchServiceContributor 'Microsoft.Authorization/roleAssignments@2
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roleSearchServiceContributor)
     principalId: userObjectId
-    principalType: 'User'
+    principalType: userPrincipalType
   }
 }
 

@@ -30,9 +30,20 @@ if (-not (Test-Path $bicepFile)) {
 Assert-AzCliLoggedIn
 
 $userOid = $env:USER_OBJECT_ID
+$userPrincipalType = ''
 if ([string]::IsNullOrWhiteSpace($userOid)) {
   $accountType = az account show --query 'user.type' -o tsv
   $accountName = az account show --query 'user.name' -o tsv
+
+  if ($accountType -eq 'user') {
+    $userPrincipalType = 'User'
+  }
+  elseif ($accountType -eq 'servicePrincipal') {
+    $userPrincipalType = 'ServicePrincipal'
+  }
+  else {
+    $userPrincipalType = 'User'
+  }
 
   if ($accountType -eq 'user') {
     $userOid = az ad signed-in-user show --query id -o tsv
@@ -47,6 +58,15 @@ if ([string]::IsNullOrWhiteSpace($userOid)) {
   else {
     # Unknown/unsupported account type (e.g., managed identity in some environments)
     $userOid = ''
+  }
+}
+
+if ([string]::IsNullOrWhiteSpace($userPrincipalType)) {
+  $accountType = az account show --query 'user.type' -o tsv
+  if ($accountType -eq 'servicePrincipal') {
+    $userPrincipalType = 'ServicePrincipal'
+  } else {
+    $userPrincipalType = 'User'
   }
 }
 
@@ -76,7 +96,7 @@ if (Test-Path $bicepParamFile) {
         -g $rg `
         -n "deployment-ins-assistant" `
         -f $bicepFile `
-        -p @$compiledParams userObjectId=$userOid
+        -p @$compiledParams userObjectId=$userOid userPrincipalType=$userPrincipalType
       if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
     }
     else {
@@ -84,7 +104,7 @@ if (Test-Path $bicepParamFile) {
         -g $rg `
         -n "deployment-ins-assistant" `
         -f $bicepFile `
-        -p @$compiledParams userObjectId=$userOid functionXFunctionsKey=$functionKey
+        -p @$compiledParams userObjectId=$userOid userPrincipalType=$userPrincipalType functionXFunctionsKey=$functionKey
       if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
     }
   }
@@ -99,7 +119,7 @@ else {
     -g $rg `
     -n "deployment-ins-assistant" `
     -f $bicepFile `
-    -p userObjectId=$userOid
+    -p userObjectId=$userOid userPrincipalType=$userPrincipalType
   if ($LASTEXITCODE -ne 0) { throw 'Deployment failed.' }
 }
 

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "6995142743992058045"
+      "templateHash": "6850960517294026617"
     }
   },
   "parameters": {
@@ -13,6 +13,17 @@
       "type": "string",
       "metadata": {
         "description": "ObjectId logged in user (Entra ID)"
+      }
+    },
+    "userPrincipalType": {
+      "type": "string",
+      "defaultValue": "User",
+      "allowedValues": [
+        "User",
+        "ServicePrincipal"
+      ],
+      "metadata": {
+        "description": "Principal type for userObjectId. Use User for interactive deployments, ServicePrincipal for CI/OIDC."
       }
     },
     "functionXFunctionsKey": {
@@ -756,6 +767,9 @@
           "userObjectId": {
             "value": "[parameters('userObjectId')]"
           },
+          "userPrincipalType": {
+            "value": "[parameters('userPrincipalType')]"
+          },
           "searchServiceName": {
             "value": "[variables('searchName')]"
           },
@@ -791,7 +805,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "2979419258022422422"
+              "templateHash": "9152542227271032247"
             }
           },
           "parameters": {
@@ -799,6 +813,17 @@
               "type": "string",
               "metadata": {
                 "description": "ObjectId logged in user (Entra ID)"
+              }
+            },
+            "userPrincipalType": {
+              "type": "string",
+              "defaultValue": "User",
+              "allowedValues": [
+                "User",
+                "ServicePrincipal"
+              ],
+              "metadata": {
+                "description": "Principal type for userObjectId. Use User for interactive deployments, ServicePrincipal for CI/OIDC."
               }
             },
             "searchServiceName": {
@@ -885,7 +910,7 @@
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
               "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName'))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName')), resourceId('Microsoft.Search/searchServices', parameters('searchServiceName')), variables('roleCognitiveServicesOpenAIUser'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName')), parameters('searchServicePrincipalId'), variables('roleCognitiveServicesOpenAIUser'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleCognitiveServicesOpenAIUser'))]",
                 "principalId": "[parameters('searchServicePrincipalId')]",
@@ -895,12 +920,12 @@
             {
               "type": "Microsoft.Authorization/roleAssignments",
               "apiVersion": "2022-04-01",
-              "scope": "[resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiFoundryName'), parameters('aiProjectName'))]",
-              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts/projects', parameters('aiFoundryName'), parameters('aiProjectName')), parameters('userObjectId'), variables('roleAzureAIOwner'))]",
+              "scope": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName'))]",
+              "name": "[guid(resourceId('Microsoft.CognitiveServices/accounts', parameters('aiFoundryName')), parameters('userObjectId'), variables('roleAzureAIOwner'))]",
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleAzureAIOwner'))]",
                 "principalId": "[parameters('userObjectId')]",
-                "principalType": "User"
+                "principalType": "[parameters('userPrincipalType')]"
               }
             },
             {
@@ -911,7 +936,7 @@
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataContributor'))]",
                 "principalId": "[parameters('userObjectId')]",
-                "principalType": "User"
+                "principalType": "[parameters('userPrincipalType')]"
               }
             },
             {
@@ -922,7 +947,7 @@
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchIndexDataReader'))]",
                 "principalId": "[parameters('userObjectId')]",
-                "principalType": "User"
+                "principalType": "[parameters('userPrincipalType')]"
               }
             },
             {
@@ -933,7 +958,7 @@
               "properties": {
                 "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleSearchServiceContributor'))]",
                 "principalId": "[parameters('userObjectId')]",
-                "principalType": "User"
+                "principalType": "[parameters('userPrincipalType')]"
               }
             },
             {
