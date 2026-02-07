@@ -481,6 +481,7 @@ def provision_data_plane():
     admin_api_key = os.getenv("SEARCH_ADMIN_API_KEY")
 
     if use_aad:
+        print("Using Azure AD authentication (DefaultAzureCredential)")
         auth = SearchAuth(use_aad=True)
     else:
         if not admin_api_key:
