@@ -202,14 +202,54 @@ resource setFunctionHostKey 'Microsoft.Resources/deploymentScripts@2023-08-01' =
     scriptContent: '''
 set -euo pipefail
 
+echo "Logging in with deployment script managed identity..."
+az login --identity -o none
+
 echo "Setting Function App host key 'default'..."
-az functionapp keys set \
-  -g "$RESOURCE_GROUP" \
-  -n "$FUNCTION_APP_NAME" \
-  --key-type functionKeys \
-  --key-name default \
-  --key-value "$FUNCTION_X_FUNCTIONS_KEY" \
-  -o none
+
+# Role assignments can take time to propagate. Retry to avoid transient 403/409/404 during initial provisioning.
+max_attempts=20
+delay_seconds=15
+
+attempt=1
+while [ "$attempt" -le "$max_attempts" ]; do
+  set +e
+  output=$(az functionapp keys set \
+    -g "$RESOURCE_GROUP" \
+    -n "$FUNCTION_APP_NAME" \
+    --key-type functionKeys \
+    --key-name default \
+    --key-value "$FUNCTION_X_FUNCTIONS_KEY" 2>&1)
+  exit_code=$?
+  set -e
+
+  if [ "$exit_code" -eq 0 ]; then
+    echo "Host key set successfully."
+    break
+  fi
+
+  echo "Attempt $attempt/$max_attempts failed (exit code: $exit_code)."
+  echo "$output"
+
+  # Fail fast for clearly invalid input.
+  if echo "$output" | grep -qiE 'Invalid|BadRequest|bad request'; then
+    echo "Error indicates a bad request. Check FUNCTION_X_FUNCTIONS_KEY value/format."
+    exit "$exit_code"
+  fi
+
+  if [ "$attempt" -lt "$max_attempts" ]; then
+    echo "Waiting ${delay_seconds}s before retry..."
+    sleep "$delay_seconds"
+  fi
+
+  attempt=$((attempt + 1))
+done
+
+if [ "$exit_code" -ne 0 ]; then
+  echo "Failed to set host key after $max_attempts attempts."
+  exit "$exit_code"
+fi
+
 echo "Done."
 '''
   }

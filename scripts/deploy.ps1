@@ -80,6 +80,24 @@ function Invoke-AzGroupDeploymentWithRetry {
       continue
     }
 
+    Write-Host "Deployment failed. Fetching failed operations for diagnostics..." -ForegroundColor Yellow
+    try {
+      $failedOps = & az deployment group operation list -g $ResourceGroup -n $DeploymentName --query "[?properties.provisioningState=='Failed']" -o json 2>&1
+      if ($LASTEXITCODE -eq 0) {
+        $failedOpsText = ($failedOps | Out-String)
+        if (-not [string]::IsNullOrWhiteSpace($failedOpsText)) {
+          Write-Host "Failed operations:\n$failedOpsText" -ForegroundColor DarkYellow
+        }
+      }
+      else {
+        $failedOpsText = ($failedOps | Out-String)
+        Write-Host "Failed to list deployment operations:\n$failedOpsText" -ForegroundColor DarkYellow
+      }
+    }
+    catch {
+      Write-Host ("Failed to query deployment operations: {0}" -f $_.Exception.Message) -ForegroundColor DarkYellow
+    }
+
     throw "Deployment failed. Azure CLI output:\n$outputText"
   }
 }
