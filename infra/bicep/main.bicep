@@ -205,7 +205,8 @@ set -euo pipefail
 echo "Logging in with deployment script managed identity..."
 az login --identity -o none
 
-echo "Setting Function App host key 'default'..."
+key_name='agent'
+echo "Setting Function App key '$key_name'..."
 
 # Role assignments can take time to propagate. Retry to avoid transient 403/409/404 during initial provisioning.
 max_attempts=20
@@ -214,12 +215,15 @@ delay_seconds=15
 attempt=1
 while [ "$attempt" -le "$max_attempts" ]; do
   set +e
+  # Trim whitespace/newlines that can slip in via env/CI.
+  key_value=$(printf '%s' "$FUNCTION_X_FUNCTIONS_KEY" | tr -d '\r\n')
+
   output=$(az functionapp keys set \
     -g "$RESOURCE_GROUP" \
     -n "$FUNCTION_APP_NAME" \
     --key-type functionKeys \
-    --key-name default \
-    --key-value "$FUNCTION_X_FUNCTIONS_KEY" 2>&1)
+    --key-name "$key_name" \
+    --key-value "$key_value" 2>&1)
   exit_code=$?
   set -e
 

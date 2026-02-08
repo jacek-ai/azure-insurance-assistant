@@ -186,7 +186,7 @@ if ([string]::IsNullOrWhiteSpace($userOid)) {
   throw 'Unable to determine Entra objectId for RBAC assignment. Set USER_OBJECT_ID env var (recommended for CI), or run with a user login (az login) that can query its profile.'
 }
 
-$functionKey = $env:FUNCTION_X_FUNCTIONS_KEY
+$functionKey = if ([string]::IsNullOrWhiteSpace($env:FUNCTION_X_FUNCTIONS_KEY)) { '' } else { $env:FUNCTION_X_FUNCTIONS_KEY.Trim() }
 
 function Test-EnvBool {
   param(
