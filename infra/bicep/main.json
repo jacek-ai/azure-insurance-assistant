@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "13027038375709389624"
+      "templateHash": "3641638906302602597"
     }
   },
   "parameters": {
@@ -454,7 +454,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "12522634919116932856"
+              "templateHash": "4690601562786006768"
             }
           },
           "parameters": {
@@ -551,6 +551,10 @@
                     {
                       "name": "AzureWebJobsStorage",
                       "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('storageAccountName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), '2025-01-01').keys[0].value, environment().suffixes.storage)]"
+                    },
+                    {
+                      "name": "AzureWebJobsFeatureFlags",
+                      "value": "EnableWorkerIndexing"
                     },
                     {
                       "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
@@ -1026,35 +1030,5 @@
         "[resourceId('Microsoft.Resources/deployments', 'storage')]"
       ]
     }
-  ],
-  "outputs": {
-    "functionKeyProvided": {
-      "type": "bool",
-      "metadata": {
-        "description": "True when functionXFunctionsKey was provided (non-empty) during deployment."
-      },
-      "value": "[not(empty(parameters('functionXFunctionsKey')))]"
-    },
-    "willRunFunctionHostKeySetter": {
-      "type": "bool",
-      "metadata": {
-        "description": "True when the deployment would create/run the Function host-key setter script resource."
-      },
-      "value": "[not(empty(parameters('functionXFunctionsKey')))]"
-    },
-    "willCreateFunctionProjectConnection": {
-      "type": "bool",
-      "metadata": {
-        "description": "True when the Foundry Project connection resource would be created/updated."
-      },
-      "value": "[not(empty(parameters('functionXFunctionsKey')))]"
-    },
-    "willCreateKeyVaultSecret": {
-      "type": "bool",
-      "metadata": {
-        "description": "True when Key Vault secret creation is enabled and function key is provided."
-      },
-      "value": "[and(and(parameters('createKeyVault'), not(empty(parameters('keyVaultName')))), not(empty(parameters('functionXFunctionsKey'))))]"
-    }
-  }
+  ]
 }
