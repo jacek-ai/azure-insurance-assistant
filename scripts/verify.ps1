@@ -107,6 +107,36 @@ function Get-AzCliValue {
 
 $expectedKey = if ([string]::IsNullOrWhiteSpace($env:FUNCTION_X_FUNCTIONS_KEY)) { '' } else { $env:FUNCTION_X_FUNCTIONS_KEY.Trim() }
 
+function Convert-KeyObjectToPairs {
+  [CmdletBinding()]
+  param(
+    [Parameter(Mandatory = $true)]
+    $Object
+  )
+
+  $pairs = @()
+  if (-not $Object) {
+    return $pairs
+  }
+
+  $target = $Object
+  # Some CLI outputs wrap keys under a `keys` property.
+  if ($Object.PSObject.Properties.Name -contains 'keys' -and $Object.keys) {
+    $target = $Object.keys
+  }
+
+  foreach ($p in $target.PSObject.Properties) {
+    $value = $p.Value
+    if ($value -is [string] -and -not [string]::IsNullOrWhiteSpace($value)) {
+      $pairs += [pscustomobject]@{ Name = $p.Name; Value = $value }
+    }
+  }
+
+  return $pairs
+}
+
+$functions = $null
+
 Write-Host '--- Verifying Function App keys ---'
 Assert-NotEmpty $ResourceGroupName 'ResourceGroupName'
 Assert-NotEmpty $FunctionAppName 'FunctionAppName'
@@ -119,47 +149,111 @@ $keysJson = Get-AzCliValue -What 'Function App keys list' -Args @(
 )
 
 $keys = $keysJson | ConvertFrom-Json
+
+$candidates = @()
+
 $functionKeys = $keys.functionKeys
 
-if (-not $functionKeys) {
-  throw "No function keys were returned for $FunctionAppName in $ResourceGroupName."
-}
 
-# Convert PSCustomObject -> dictionary for easier handling
-$functionKeyPairs = @()
-foreach ($p in $functionKeys.PSObject.Properties) {
-  if (-not [string]::IsNullOrWhiteSpace([string]$p.Value)) {
-    $functionKeyPairs += [pscustomobject]@{ Name = $p.Name; Value = [string]$p.Value }
+if ($functionKeys) {
+  $functionKeyPairs = Convert-KeyObjectToPairs -Object $functionKeys
+  foreach ($pair in $functionKeyPairs) {
+    $candidates += [pscustomobject]@{ Scope = 'app:functionKey'; Name = $pair.Name; Value = $pair.Value }
   }
 }
 
-if ($functionKeyPairs.Count -lt 1) {
-  throw "No non-empty function keys were found for $FunctionAppName in $ResourceGroupName."
+if (-not [string]::IsNullOrWhiteSpace([string]$keys.masterKey)) {
+  $candidates += [pscustomobject]@{ Scope = 'app:masterKey'; Name = 'masterKey'; Value = [string]$keys.masterKey }
 }
 
-Write-Host ("OK: Function keys present: {0}." -f (($functionKeyPairs | Select-Object -ExpandProperty Name) -join ', '))
+if ($keys.systemKeys) {
+  $systemKeyPairs = Convert-KeyObjectToPairs -Object $keys.systemKeys
+  foreach ($pair in $systemKeyPairs) {
+    $candidates += [pscustomobject]@{ Scope = 'app:systemKey'; Name = $pair.Name; Value = $pair.Value }
+  }
+}
+
+if ($candidates.Count -lt 1) {
+  throw "No non-empty Function App keys were found for $FunctionAppName in $ResourceGroupName."
+}
+
+$appKeyNames = ($candidates | Where-Object { $_.Scope -eq 'app:functionKey' } | Select-Object -ExpandProperty Name)
+if ($appKeyNames) {
+  Write-Host ("OK: Function keys present: {0}." -f ($appKeyNames -join ', '))
+}
+else {
+  Write-Host 'OK: No app-level functionKeys found, but other key types exist.'
+}
 
 if (-not [string]::IsNullOrWhiteSpace($expectedKey)) {
-  $match = $functionKeyPairs | Where-Object { $_.Value -eq $expectedKey } | Select-Object -First 1
+  $match = $candidates | Where-Object { $_.Value -eq $expectedKey } | Select-Object -First 1
   if (-not $match) {
-    $availableNames = ($functionKeyPairs | Select-Object -ExpandProperty Name) -join ', '
-    throw "Mismatch: none of the Function App function keys match FUNCTION_X_FUNCTIONS_KEY. Available key names: $availableNames"
+    Write-Host 'Warning: no match in app-level keys; checking function-level keys...' -ForegroundColor Yellow
+
+    $functionsJson = Get-AzCliValue -What 'Function App functions list' -Args @(
+      'functionapp','function','list',
+      '-g', $ResourceGroupName,
+      '-n', $FunctionAppName,
+      '-o', 'json'
+    )
+
+    $functions = $functionsJson | ConvertFrom-Json
+    if (-not $functions -or $functions.Count -lt 1) {
+      throw "Mismatch: FUNCTION_X_FUNCTIONS_KEY does not match any app-level keys, and no functions are indexed in the Function App ($FunctionAppName)."
+    }
+
+    $functionLevelCandidates = @()
+    foreach ($fn in $functions) {
+      $fullName = [string]$fn.name
+      $shortName = if ($fullName -match '/') { ($fullName -split '/')[-1] } else { $fullName }
+      if ([string]::IsNullOrWhiteSpace($shortName)) {
+        continue
+      }
+
+      $fnKeysJson = Get-AzCliValue -What "Function keys list ($shortName)" -Args @(
+        'functionapp','function','keys','list',
+        '-g', $ResourceGroupName,
+        '-n', $FunctionAppName,
+        '--function-name', $shortName,
+        '-o', 'json'
+      )
+
+      $fnKeys = $fnKeysJson | ConvertFrom-Json
+      $fnKeyPairs = Convert-KeyObjectToPairs -Object $fnKeys
+      foreach ($pair in $fnKeyPairs) {
+        $functionLevelCandidates += [pscustomobject]@{ Scope = "function:$shortName"; Name = $pair.Name; Value = $pair.Value }
+      }
+    }
+
+    $match = $functionLevelCandidates | Where-Object { $_.Value -eq $expectedKey } | Select-Object -First 1
+    if (-not $match) {
+      $availableAppNames = ($candidates | Where-Object { $_.Scope -eq 'app:functionKey' } | Select-Object -ExpandProperty Name) -join ', '
+      $checkedFunctions = ($functions | ForEach-Object {
+        $n = [string]$_.name
+        if ($n -match '/') { ($n -split '/')[-1] } else { $n }
+      } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique) -join ', '
+
+      throw "Mismatch: FUNCTION_X_FUNCTIONS_KEY does not match any app-level keys (functionKeys: $availableAppNames), nor any function-level keys (functions checked: $checkedFunctions)."
+    }
   }
-  Write-Host ("OK: FUNCTION_X_FUNCTIONS_KEY matches function key '{0}'." -f $match.Name)
+
+  Write-Host ("OK: FUNCTION_X_FUNCTIONS_KEY matches {0} key '{1}'." -f $match.Scope, $match.Name)
 }
 else {
   Write-Host 'Note: FUNCTION_X_FUNCTIONS_KEY not set; skipping value match check.'
 }
 
 Write-Host '--- Verifying Function App functions are indexed ---'
-$functionsJson = Get-AzCliValue -What 'Function App functions list' -Args @(
-  'functionapp','function','list',
-  '-g', $ResourceGroupName,
-  '-n', $FunctionAppName,
-  '-o', 'json'
-)
+if (-not $functions) {
+  $functionsJson = Get-AzCliValue -What 'Function App functions list' -Args @(
+    'functionapp','function','list',
+    '-g', $ResourceGroupName,
+    '-n', $FunctionAppName,
+    '-o', 'json'
+  )
 
-$functions = $functionsJson | ConvertFrom-Json
+  $functions = $functionsJson | ConvertFrom-Json
+}
 if (-not $functions -or $functions.Count -lt 1) {
   throw "No functions are indexed in the Function App ($FunctionAppName). This typically means the code package did not deploy correctly or the host failed to load functions (check Function App logs / remote build)."
 }
