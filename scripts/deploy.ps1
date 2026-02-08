@@ -82,11 +82,32 @@ function Invoke-AzGroupDeploymentWithRetry {
 
     Write-Host "Deployment failed. Fetching failed operations for diagnostics..." -ForegroundColor Yellow
     try {
-      $failedOps = & az deployment group operation list -g $ResourceGroup -n $DeploymentName --query "[?properties.provisioningState=='Failed']" -o json 2>&1
+      # Correct CLI shape is: `az deployment operation group list` (not `az deployment group operation list`).
+      $failedOps = & az deployment operation group list -g $ResourceGroup -n $DeploymentName --query "[?properties.provisioningState=='Failed']" -o json 2>&1
       if ($LASTEXITCODE -eq 0) {
         $failedOpsText = ($failedOps | Out-String)
         if (-not [string]::IsNullOrWhiteSpace($failedOpsText)) {
           Write-Host "Failed operations:\n$failedOpsText" -ForegroundColor DarkYellow
+
+          # Try to surface deploymentScripts status message (often contains the real stderr/stdout).
+          try {
+            $scriptTargets = & az deployment operation group list -g $ResourceGroup -n $DeploymentName --query "[?properties.provisioningState=='Failed' && contains(properties.targetResource.resourceType, 'Microsoft.Resources/deploymentScripts')].properties.targetResource.resourceName" -o tsv 2>&1
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($scriptTargets | Out-String))) {
+              foreach ($scriptName in ($scriptTargets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+                Write-Host ("Fetching deployment script statusMessage for '{0}'..." -f $scriptName) -ForegroundColor DarkYellow
+                $scriptStatus = & az resource show -g $ResourceGroup -n $scriptName --resource-type Microsoft.Resources/deploymentScripts --query "properties.statusMessage" -o tsv 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  $scriptStatusText = ($scriptStatus | Out-String)
+                  if (-not [string]::IsNullOrWhiteSpace($scriptStatusText)) {
+                    Write-Host "Deployment script statusMessage:\n$scriptStatusText" -ForegroundColor DarkYellow
+                  }
+                }
+              }
+            }
+          }
+          catch {
+            Write-Host ("Failed to fetch deployment script status: {0}" -f $_.Exception.Message) -ForegroundColor DarkYellow
+          }
         }
       }
       else {
