@@ -26,6 +26,19 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2025-01-01' existing 
   name: storageAccountName
 }
 
+resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-01-01' = {
+  name: 'default'
+  parent: storageAccount
+}
+
+resource contentShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-01-01' = {
+  name: contentShareName
+  parent: fileService
+  properties: {
+    shareQuota: 100
+  }
+}
+
 var blobAccountUrl = 'https://${storageAccountName}.blob.${environment().suffixes.storage}'
 
 // Required by Kudu/zipdeploy for mounting the content share.
@@ -116,6 +129,9 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
       ]
     }
   }
+  dependsOn: [
+    contentShare
+  ]
 }
 
 output functionAppId string = functionApp.id
