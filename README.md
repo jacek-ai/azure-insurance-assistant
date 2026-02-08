@@ -5,7 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 
 
-Product-gated RAG reference implementation for regulated domains (insurance).
+Product-gated RAG implementation for regulated domains (insurance).
 
 Insurance assistant built on **Azure AI Foundry** + **Azure AI Search (RAG)** with a deliberate safety constraint: **the assistant must select exactly one insurance product (and version) before it can retrieve policy chunks**.
 
