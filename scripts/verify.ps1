@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Checks that:
-      1) Azure Function App has function key 'default' set (and matches FUNCTION_X_FUNCTIONS_KEY if provided)
+      1) Azure Function App has at least one function key set (and matches FUNCTION_X_FUNCTIONS_KEY if provided)
       2) Key Vault secret exists (and matches FUNCTION_X_FUNCTIONS_KEY if provided)
       3) AI Foundry Project connection exists
 
@@ -105,23 +105,47 @@ function Get-AzCliValue {
   throw "$What failed after $MaxAttempts attempts."
 }
 
-$expectedKey = $env:FUNCTION_X_FUNCTIONS_KEY
+$expectedKey = if ([string]::IsNullOrWhiteSpace($env:FUNCTION_X_FUNCTIONS_KEY)) { '' } else { $env:FUNCTION_X_FUNCTIONS_KEY.Trim() }
 
-Write-Host '--- Verifying Function App key (default) ---'
+Write-Host '--- Verifying Function App keys ---'
 Assert-NotEmpty $ResourceGroupName 'ResourceGroupName'
 Assert-NotEmpty $FunctionAppName 'FunctionAppName'
 
-$functionKey = az functionapp keys list -g $ResourceGroupName -n $FunctionAppName --query 'functionKeys.default' -o tsv
-if ([string]::IsNullOrWhiteSpace($functionKey)) {
-  throw "Function App key 'default' was not found for $FunctionAppName in $ResourceGroupName."
+$keysJson = Get-AzCliValue -What 'Function App keys list' -Args @(
+  'functionapp','keys','list',
+  '-g', $ResourceGroupName,
+  '-n', $FunctionAppName,
+  '-o', 'json'
+)
+
+$keys = $keysJson | ConvertFrom-Json
+$functionKeys = $keys.functionKeys
+
+if (-not $functionKeys) {
+  throw "No function keys were returned for $FunctionAppName in $ResourceGroupName."
 }
-Write-Host "OK: Function App key 'default' exists."
+
+# Convert PSCustomObject -> dictionary for easier handling
+$functionKeyPairs = @()
+foreach ($p in $functionKeys.PSObject.Properties) {
+  if (-not [string]::IsNullOrWhiteSpace([string]$p.Value)) {
+    $functionKeyPairs += [pscustomobject]@{ Name = $p.Name; Value = [string]$p.Value }
+  }
+}
+
+if ($functionKeyPairs.Count -lt 1) {
+  throw "No non-empty function keys were found for $FunctionAppName in $ResourceGroupName."
+}
+
+Write-Host ("OK: Function keys present: {0}." -f (($functionKeyPairs | Select-Object -ExpandProperty Name) -join ', '))
 
 if (-not [string]::IsNullOrWhiteSpace($expectedKey)) {
-  if ($functionKey -ne $expectedKey) {
-    throw "Mismatch: Function App key 'default' does not match FUNCTION_X_FUNCTIONS_KEY."
+  $match = $functionKeyPairs | Where-Object { $_.Value -eq $expectedKey } | Select-Object -First 1
+  if (-not $match) {
+    $availableNames = ($functionKeyPairs | Select-Object -ExpandProperty Name) -join ', '
+    throw "Mismatch: none of the Function App function keys match FUNCTION_X_FUNCTIONS_KEY. Available key names: $availableNames"
   }
-  Write-Host 'OK: Function App key matches FUNCTION_X_FUNCTIONS_KEY.'
+  Write-Host ("OK: FUNCTION_X_FUNCTIONS_KEY matches function key '{0}'." -f $match.Name)
 }
 else {
   Write-Host 'Note: FUNCTION_X_FUNCTIONS_KEY not set; skipping value match check.'
