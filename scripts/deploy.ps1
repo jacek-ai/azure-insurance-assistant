@@ -131,6 +131,38 @@ if ([string]::IsNullOrWhiteSpace($userOid)) {
 
 $functionKey = $env:FUNCTION_X_FUNCTIONS_KEY
 
+function Test-EnvBool {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Name,
+
+    [Parameter(Mandatory = $false)]
+    [bool] $Default = $false
+  )
+
+  $raw = [string][Environment]::GetEnvironmentVariable($Name)
+  if ([string]::IsNullOrWhiteSpace($raw)) {
+    return $Default
+  }
+
+  $value = $raw.Trim().ToLowerInvariant()
+  return $value -in @('1','true','yes','y','on')
+}
+
+$createKeyVault = Test-EnvBool -Name 'CREATE_KEY_VAULT' -Default $false
+$keyVaultName = $env:KEY_VAULT_NAME
+$keyVaultSecretName = if (-not [string]::IsNullOrWhiteSpace($env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME)) { $env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME } else { 'functions-host-key-default' }
+
+if ($createKeyVault) {
+  if ([string]::IsNullOrWhiteSpace($functionKey)) {
+    throw 'CREATE_KEY_VAULT=true requires FUNCTION_X_FUNCTIONS_KEY to be set (host key value to store as a Key Vault secret).'
+  }
+  if ([string]::IsNullOrWhiteSpace($keyVaultName)) {
+    throw 'CREATE_KEY_VAULT=true requires KEY_VAULT_NAME to be set.'
+  }
+  Write-Host ("Key Vault creation is ENABLED (KEY_VAULT_NAME={0}, KEY_VAULT_FUNCTION_KEY_SECRET_NAME={1})." -f $keyVaultName, $keyVaultSecretName) -ForegroundColor Cyan
+}
+
 if ([string]::IsNullOrWhiteSpace($functionKey)) {
   Write-Host 'FUNCTION_X_FUNCTIONS_KEY is not set (or empty). Deploying WITHOUT functionXFunctionsKey.' -ForegroundColor Yellow
 }
@@ -163,12 +195,20 @@ if (Test-Path $bicepParamFile) {
     }
     else {
       Write-Host 'Bicep deployment parameters: compiled params + userObjectId + userPrincipalType + functionXFunctionsKey.' -ForegroundColor DarkGray
-      Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+      $parameters = @(
         "@$compiledParams",
         "userObjectId=$userOid",
         "userPrincipalType=$userPrincipalType",
         "functionXFunctionsKey=$functionKey"
       )
+
+      if ($createKeyVault) {
+        $parameters += "createKeyVault=true"
+        $parameters += "keyVaultName=$keyVaultName"
+        $parameters += "keyVaultFunctionKeySecretName=$keyVaultSecretName"
+      }
+
+      Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters $parameters
     }
   }
   finally {
@@ -185,11 +225,19 @@ else {
     )
   }
   else {
-    Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters @(
+    $parameters = @(
       "userObjectId=$userOid",
       "userPrincipalType=$userPrincipalType",
       "functionXFunctionsKey=$functionKey"
     )
+
+    if ($createKeyVault) {
+      $parameters += "createKeyVault=true"
+      $parameters += "keyVaultName=$keyVaultName"
+      $parameters += "keyVaultFunctionKeySecretName=$keyVaultSecretName"
+    }
+
+    Invoke-AzGroupDeploymentWithRetry -ResourceGroup $rg -DeploymentName "deployment-ins-assistant" -TemplateFile $bicepFile -Parameters $parameters
   }
 }
 

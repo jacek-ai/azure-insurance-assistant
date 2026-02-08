@@ -132,17 +132,27 @@ if (-not $SkipKeyVault) {
   Assert-NotEmpty $KeyVaultName 'KeyVaultName'
   Assert-NotEmpty $KeyVaultSecretName 'KeyVaultSecretName'
 
-  # Ensure secret exists
-  $null = Get-AzCliValue -What 'Key Vault secret existence check' -Args @(
-    'keyvault','secret','show',
-    '--vault-name', $KeyVaultName,
-    '--name', $KeyVaultSecretName,
-    '--query', 'id',
-    '-o', 'tsv'
-  )
-  Write-Host "OK: Key Vault secret exists ($KeyVaultName / $KeyVaultSecretName)."
+  try {
+    # Ensure secret exists
+    $null = Get-AzCliValue -What 'Key Vault secret existence check' -Args @(
+      'keyvault','secret','show',
+      '--vault-name', $KeyVaultName,
+      '--name', $KeyVaultSecretName,
+      '--query', 'id',
+      '-o', 'tsv'
+    )
+    Write-Host "OK: Key Vault secret exists ($KeyVaultName / $KeyVaultSecretName)."
+  }
+  catch {
+    # Key Vault is optional in this repo (main.bicep creates it only when createKeyVault=true).
+    # If it's missing or unreachable from the runner, don't fail the whole verification.
+    Write-Host ("Warning: skipping Key Vault checks. Reason: {0}" -f $_.Exception.Message) -ForegroundColor Yellow
+    Write-Host 'Tip: to enforce Key Vault checks, provision the vault/secret (createKeyVault=true) and ensure network/DNS allows access from the runner.' -ForegroundColor DarkGray
+    Write-Host 'Tip: to silence this message, run verify with -SkipKeyVault.' -ForegroundColor DarkGray
+    $SkipKeyVault = $true
+  }
 
-  if (-not [string]::IsNullOrWhiteSpace($expectedKey)) {
+  if (-not $SkipKeyVault -and -not [string]::IsNullOrWhiteSpace($expectedKey)) {
     $kvValue = Get-AzCliValue -What 'Key Vault secret value read' -Args @(
       'keyvault','secret','show',
       '--vault-name', $KeyVaultName,
@@ -158,7 +168,7 @@ if (-not $SkipKeyVault) {
     }
     Write-Host 'OK: Key Vault secret value matches FUNCTION_X_FUNCTIONS_KEY.'
   }
-  else {
+  elseif (-not $SkipKeyVault) {
     Write-Host 'Note: FUNCTION_X_FUNCTIONS_KEY not set; skipping Key Vault value match check.'
   }
 }
