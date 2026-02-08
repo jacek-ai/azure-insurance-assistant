@@ -109,7 +109,7 @@ jobs:
 
       - name: Publish Functions code
         shell: pwsh
-        run: ./scripts/deploy-functions.ps1
+        run: ./scripts/deploy-functions.ps1 -BuildRemote
 
       - name: Verify wiring
         shell: pwsh

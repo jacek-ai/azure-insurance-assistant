@@ -127,6 +127,21 @@ else {
   Write-Host 'Note: FUNCTION_X_FUNCTIONS_KEY not set; skipping value match check.'
 }
 
+Write-Host '--- Verifying Function App functions are indexed ---'
+$functionsJson = Get-AzCliValue -What 'Function App functions list' -Args @(
+  'functionapp','function','list',
+  '-g', $ResourceGroupName,
+  '-n', $FunctionAppName,
+  '-o', 'json'
+)
+
+$functions = $functionsJson | ConvertFrom-Json
+if (-not $functions -or $functions.Count -lt 1) {
+  throw "No functions are indexed in the Function App ($FunctionAppName). This typically means the code package did not deploy correctly or the host failed to load functions (check Function App logs / remote build)."
+}
+
+Write-Host ("OK: Functions indexed: {0}." -f $functions.Count)
+
 if (-not $SkipKeyVault) {
   Write-Host '--- Verifying Key Vault secret ---'
   Assert-NotEmpty $KeyVaultName 'KeyVaultName'
