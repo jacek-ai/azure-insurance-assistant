@@ -69,6 +69,11 @@ resource functionApp 'Microsoft.Web/sites@2022-09-01' = {
           value: storageConnectionString
         }
         {
+          // Required for Python v2 programming model (decorator-based FunctionApp) indexing.
+          name: 'AzureWebJobsFeatureFlags'
+          value: 'EnableWorkerIndexing'
+        }
+        {
           name: 'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
           value: storageConnectionString
         }
