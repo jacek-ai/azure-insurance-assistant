@@ -207,6 +207,7 @@ function Test-EnvBool {
 }
 
 $createKeyVault = Test-EnvBool -Name 'CREATE_KEY_VAULT' -Default $false
+$setFunctionKeyDuringDeploy = Test-EnvBool -Name 'SET_FUNCTION_KEY_DURING_DEPLOY' -Default $false
 $keyVaultName = $env:KEY_VAULT_NAME
 $keyVaultSecretName = if (-not [string]::IsNullOrWhiteSpace($env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME)) { $env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME } else { 'functions-host-key-default' }
 
@@ -259,6 +260,10 @@ if (Test-Path $bicepParamFile) {
         "functionXFunctionsKey=$functionKey"
       )
 
+      if ($setFunctionKeyDuringDeploy) {
+        $parameters += 'setFunctionKeyDuringDeploy=true'
+      }
+
       if ($createKeyVault) {
         $parameters += "createKeyVault=true"
         $parameters += "keyVaultName=$keyVaultName"
@@ -287,6 +292,10 @@ else {
       "userPrincipalType=$userPrincipalType",
       "functionXFunctionsKey=$functionKey"
     )
+
+    if ($setFunctionKeyDuringDeploy) {
+      $parameters += 'setFunctionKeyDuringDeploy=true'
+    }
 
     if ($createKeyVault) {
       $parameters += "createKeyVault=true"

@@ -12,6 +12,9 @@ param userPrincipalType string = 'User'
 @description('Azure Functions host key value to store in the AI Foundry Project connection as x-functions-key. Leave empty to skip creating the connection.')
 param functionXFunctionsKey string = ''
 
+@description('Whether to set the Function App key during deployment using a deployment script. Disabled by default because some environments reject updating function keys via management API (HTTP 400).')
+param setFunctionKeyDuringDeploy bool = false
+
 @description('AI Foundry Project connection name for the Azure Functions x-functions-key')
 param functionProjectConnectionName string = 'con-function-insurance-assistance'
 
@@ -169,7 +172,7 @@ resource functionKeySetterIdentity 'Microsoft.ManagedIdentity/userAssignedIdenti
   location: location
 }
 
-resource setFunctionHostKey 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (!empty(functionXFunctionsKey)) {
+resource setFunctionHostKey 'Microsoft.Resources/deploymentScripts@2023-08-01' = if (setFunctionKeyDuringDeploy && !empty(functionXFunctionsKey)) {
   name: '${functionAppName}-set-hostkey'
   location: location
   kind: 'AzureCLI'
@@ -308,7 +311,7 @@ module rbac 'modules/rbac.bicep' = {
     storageAccountName: saName
     functionAppPrincipalId: functionApp.outputs.functionAppPrincipalId
     functionAppName: functionAppName
-    grantFunctionKeySetterContributor: !empty(functionXFunctionsKey)
+    grantFunctionKeySetterContributor: setFunctionKeyDuringDeploy && !empty(functionXFunctionsKey)
     functionKeySetterPrincipalId: functionKeySetterIdentity.properties.principalId
   }
   dependsOn: [
