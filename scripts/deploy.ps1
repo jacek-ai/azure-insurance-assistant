@@ -97,7 +97,7 @@ function Invoke-AzGroupDeploymentWithRetry {
                 Write-Host ("Fetching deployment script statusMessage for '{0}'..." -f $scriptName) -ForegroundColor DarkYellow
 
                 # Prefer dedicated command group for richer output.
-                $scriptShow = & az deployment-scripts show -g $ResourceGroup -n $scriptName -o json 2>&1
+                $scriptShow = & az deployment-scripts show --resource-group $ResourceGroup --name $scriptName -o json 2>&1
                 if ($LASTEXITCODE -eq 0) {
                   $scriptShowText = ($scriptShow | Out-String)
                   if (-not [string]::IsNullOrWhiteSpace($scriptShowText)) {
@@ -109,7 +109,7 @@ function Invoke-AzGroupDeploymentWithRetry {
                   Write-Host "Failed to show deployment script:\n$scriptShowText" -ForegroundColor DarkYellow
                 }
 
-                $scriptLog = & az deployment-scripts show-log -g $ResourceGroup -n $scriptName 2>&1
+                $scriptLog = & az deployment-scripts show-log --resource-group $ResourceGroup --name $scriptName 2>&1
                 if ($LASTEXITCODE -eq 0) {
                   $scriptLogText = ($scriptLog | Out-String)
                   if (-not [string]::IsNullOrWhiteSpace($scriptLogText)) {
