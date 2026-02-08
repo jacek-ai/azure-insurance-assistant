@@ -95,12 +95,30 @@ function Invoke-AzGroupDeploymentWithRetry {
             if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($scriptTargets | Out-String))) {
               foreach ($scriptName in ($scriptTargets | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
                 Write-Host ("Fetching deployment script statusMessage for '{0}'..." -f $scriptName) -ForegroundColor DarkYellow
-                $scriptStatus = & az resource show -g $ResourceGroup -n $scriptName --resource-type Microsoft.Resources/deploymentScripts --query "properties.statusMessage" -o tsv 2>&1
+
+                # Prefer dedicated command group for richer output.
+                $scriptShow = & az deployment-scripts show -g $ResourceGroup -n $scriptName -o json 2>&1
                 if ($LASTEXITCODE -eq 0) {
-                  $scriptStatusText = ($scriptStatus | Out-String)
-                  if (-not [string]::IsNullOrWhiteSpace($scriptStatusText)) {
-                    Write-Host "Deployment script statusMessage:\n$scriptStatusText" -ForegroundColor DarkYellow
+                  $scriptShowText = ($scriptShow | Out-String)
+                  if (-not [string]::IsNullOrWhiteSpace($scriptShowText)) {
+                    Write-Host "Deployment script (show):\n$scriptShowText" -ForegroundColor DarkYellow
                   }
+                }
+                else {
+                  $scriptShowText = ($scriptShow | Out-String)
+                  Write-Host "Failed to show deployment script:\n$scriptShowText" -ForegroundColor DarkYellow
+                }
+
+                $scriptLog = & az deployment-scripts show-log -g $ResourceGroup -n $scriptName 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                  $scriptLogText = ($scriptLog | Out-String)
+                  if (-not [string]::IsNullOrWhiteSpace($scriptLogText)) {
+                    Write-Host "Deployment script logs:\n$scriptLogText" -ForegroundColor DarkYellow
+                  }
+                }
+                else {
+                  $scriptLogText = ($scriptLog | Out-String)
+                  Write-Host "Failed to get deployment script logs:\n$scriptLogText" -ForegroundColor DarkYellow
                 }
               }
             }
