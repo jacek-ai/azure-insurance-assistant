@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   deploy:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     environment: DEV
 
     env:
@@ -109,7 +109,7 @@ jobs:
 
       - name: Publish Functions code
         shell: pwsh
-        run: ./scripts/deploy-functions.ps1 -BuildRemote
+        run: ./scripts/deploy-functions.ps1
 
       - name: Verify wiring
         shell: pwsh
