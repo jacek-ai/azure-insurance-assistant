@@ -211,6 +211,8 @@ $setFunctionKeyDuringDeploy = Test-EnvBool -Name 'SET_FUNCTION_KEY_DURING_DEPLOY
 $keyVaultName = $env:KEY_VAULT_NAME
 $keyVaultSecretName = if (-not [string]::IsNullOrWhiteSpace($env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME)) { $env:KEY_VAULT_FUNCTION_KEY_SECRET_NAME } else { 'functions-host-key-default' }
 
+Write-Host ("SET_FUNCTION_KEY_DURING_DEPLOY={0}." -f $setFunctionKeyDuringDeploy) -ForegroundColor DarkGray
+
 if ($createKeyVault) {
   if ([string]::IsNullOrWhiteSpace($functionKey)) {
     throw 'CREATE_KEY_VAULT=true requires FUNCTION_X_FUNCTIONS_KEY to be set (host key value to store as a Key Vault secret).'
@@ -226,6 +228,12 @@ if ([string]::IsNullOrWhiteSpace($functionKey)) {
 }
 else {
   Write-Host ("FUNCTION_X_FUNCTIONS_KEY is set. Deploying WITH functionXFunctionsKey (length: {0})." -f $functionKey.Length) -ForegroundColor Cyan
+  if ($setFunctionKeyDuringDeploy) {
+    Write-Host 'Function App key update during deploy is ENABLED (will run Bicep deploymentScript to set a function key).' -ForegroundColor Cyan
+  }
+  else {
+    Write-Host 'Function App key update during deploy is DISABLED (no deploymentScript will run to set a function key).' -ForegroundColor Yellow
+  }
 }
 
 az group create -n $rg -l $loc | Out-Null

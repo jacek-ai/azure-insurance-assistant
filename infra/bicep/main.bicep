@@ -209,7 +209,8 @@ echo "Logging in with deployment script managed identity..."
 az login --identity -o none
 
 key_name='agent'
-echo "Setting Function App key '$key_name'..."
+echo "Setting Function App key '$key_name' (app: '$FUNCTION_APP_NAME', rg: '$RESOURCE_GROUP')..."
+echo "Key value source: env var FUNCTION_X_FUNCTIONS_KEY (secure deploymentScript env var from Bicep param functionXFunctionsKey)."
 
 # Role assignments can take time to propagate. Retry to avoid transient 403/409/404 during initial provisioning.
 max_attempts=20
@@ -220,6 +221,7 @@ while [ "$attempt" -le "$max_attempts" ]; do
   set +e
   # Trim whitespace/newlines that can slip in via env/CI.
   key_value=$(printf '%s' "$FUNCTION_X_FUNCTIONS_KEY" | tr -d '\r\n')
+  echo "Key value prepared (length: ${#key_value})."
 
   output=$(az functionapp keys set \
     -g "$RESOURCE_GROUP" \
@@ -231,7 +233,7 @@ while [ "$attempt" -le "$max_attempts" ]; do
   set -e
 
   if [ "$exit_code" -eq 0 ]; then
-    echo "Host key set successfully."
+    echo "OK: Function App key '$key_name' set successfully."
     break
   fi
 

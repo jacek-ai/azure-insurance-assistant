@@ -24,6 +24,10 @@ jobs:
       # Optional (enables Foundry Project Connection + single-secret wiring)
       FUNCTION_X_FUNCTIONS_KEY: ${{ secrets.FUNCTION_X_FUNCTIONS_KEY }}
 
+      # When the secret is provided, also set the Function App key during infra deploy.
+      # This is required for verify.ps1 to be able to match the expected x-functions-key.
+      SET_FUNCTION_KEY_DURING_DEPLOY: ${{ secrets.FUNCTION_X_FUNCTIONS_KEY && 'true' || 'false' }}
+
       # --- Search data-plane provisioning ---
       SEARCH_SERVICE_ENDPOINT: ${{ vars.SEARCH_SERVICE_ENDPOINT }}
       SEARCH_API_VERSION: ${{ vars.SEARCH_API_VERSION }}
