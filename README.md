@@ -3,6 +3,7 @@
 ![Azure AI Foundry](https://img.shields.io/badge/Azure-AI%20Foundry-blue)
 ![Architecture](https://img.shields.io/badge/architecture-product--gated%20RAG-purple)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+[![CI/CD - Deploy to Azure](https://github.com/jacek-ai/azure-insurance-assistant/actions/workflows/deploy.yml/badge.svg)](https://github.com/jacek-ai/azure-insurance-assistant/actions/workflows/deploy.yml)
 
 
 Product-gated RAG implementation for regulated domains (insurance).
