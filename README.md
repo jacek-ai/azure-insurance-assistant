@@ -181,7 +181,7 @@ Default connection expected by the agent script:
 
 - Connection name: `con-function-insurance-assistance`
 - Header name: `x-functions-key`
-- Value: Function App → App keys → key named `default`
+- Value: Function App → App keys → a Function App key value (this repo uses a key named `agent` when key-setting is enabled)
 
 ### Azure Functions → Storage / Search
 
@@ -235,8 +235,13 @@ $env:FUNCTION_X_FUNCTIONS_KEY = "<your-secret>"
 
 When `FUNCTION_X_FUNCTIONS_KEY` is provided, the deployment:
 
-- sets the Function App key named `default` to that value
 - creates the AI Foundry Project Connection that stores the same value as `x-functions-key`
+- optionally sets the Function App key named `agent` to that value **only when** `SET_FUNCTION_KEY_DURING_DEPLOY=true`
+
+Note:
+
+- `SET_FUNCTION_KEY_DURING_DEPLOY` is disabled by default because some environments/tenants reject updating Function keys via the management API.
+- If key-setting is disabled, you can still use `FUNCTION_X_FUNCTIONS_KEY` to create the Foundry Project Connection, but you must ensure the Function App has a matching key value (set it manually or pick an existing key value).
 
 ### 2) Publish Azure Functions code
 
@@ -359,6 +364,8 @@ This repo includes a minimal workflow that runs the end-to-end sequence (deploy 
 - `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` (OIDC for `azure/login`)
 - `STORAGE_CONNECTION_STRING` (used by Search knowledge source provisioning)
 - Optional: `FUNCTION_X_FUNCTIONS_KEY` (enables single-secret wiring + Foundry Project Connection)
+
+When `FUNCTION_X_FUNCTIONS_KEY` is set, the workflow also auto-enables setting the Function App key during the infra deployment (`SET_FUNCTION_KEY_DURING_DEPLOY=true`).
 
 ### Required variables
 
