@@ -24,5 +24,6 @@ def _add_to_syspath(path: Path) -> None:
 
 # Allow importing modules that live outside a Python package.
 REPO_ROOT = Path(__file__).resolve().parents[1]
+_add_to_syspath(REPO_ROOT / "src")
 _add_to_syspath(REPO_ROOT / "src" / "functions" / "insurance-assistant-functions")
 _add_to_syspath(REPO_ROOT / "src" / "agent")

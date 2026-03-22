@@ -45,6 +45,27 @@ From an engineering perspective:
 - **Minimal secret surface**: use a Project Connection for the Functions key (optionally backed by Key Vault).
 - **Infrastructure as code**: provision resources and RBAC using Bicep modules.
 
+## Quality gates: evaluation (enterprise readiness)
+
+Beyond unit/contract tests, this project supports **cloud-based agent evaluation** in **Azure AI Foundry**.
+This enables repeatable, comparable quality checks (and can be used as a CI/CD quality gate) for:
+
+- **Agent behavior** (does it follow the product-gating rule?)
+- **Response quality** (clarity and coherence)
+- **Safety** (basic content risk checks)
+
+Implementation in this repo follows the Foundry evaluation API pattern:
+
+- Microsoft Learn reference: https://learn.microsoft.com/azure/foundry/observability/how-to/evaluate-agent?view=foundry
+- Local runner: `src/evals/run_foundry_agent_eval.py`
+- Test dataset (JSONL): `test/test-data/agent-eval-queries.jsonl`
+
+Built-in evaluators included (basic baseline):
+
+- Task Adherence (`builtin.task_adherence`)
+- Coherence (`builtin.coherence`)
+- Violence (`builtin.violence`)
+
 ## What makes this different from “typical RAG”
 
 Many RAG demos follow a simple pattern: embed the user question, retrieve the top-$k$ most similar chunks across the entire corpus, then ask the model to answer.
@@ -412,6 +433,41 @@ Run the CI-friendly test suite:
 ```
 
 The script creates/uses a local `.venv`, installs [requirements-dev.txt](requirements-dev.txt), and runs `pytest`.
+
+Note: Foundry agent evaluations are **optional** and are not executed in the default test suite.
+They require Azure credentials and a deployed Foundry project/agent.
+
+### Agent evaluation (Azure AI Foundry)
+
+This repo includes a small evaluation runner based on the Foundry evaluation API (see: https://learn.microsoft.com/azure/foundry/observability/how-to/evaluate-agent?view=foundry).
+
+It runs **3 basic built-in evaluators** against your deployed Foundry agent:
+
+- Task Adherence (`builtin.task_adherence`)
+- Coherence (`builtin.coherence`)
+- Violence (`builtin.violence`)
+
+Prerequisites:
+
+- A deployed Foundry project + agent version (see [src/agent/create_agent.py](src/agent/create_agent.py)).
+- Authentication working for `DefaultAzureCredential` (for example `az login`).
+- Environment variables:
+	- `AI_SERVICE_PROJECT_ENDPOINT`
+	- `AI_AGENT_NAME`
+	- `AI_MODEL_DEPLOYMENT` (judge model deployment name, for example your `gpt-4o-mini` deployment)
+
+Run the evaluation (dataset lives in `test/test-data/agent-eval-queries.jsonl`):
+
+```powershell
+python ./src/evals/run_foundry_agent_eval.py --dataset ./test/test-data/agent-eval-queries.jsonl
+```
+
+Optional: run as a pytest smoke test (skipped by default):
+
+```powershell
+$env:RUN_FOUNDRY_EVALS = "1"
+python -m pytest -k foundry_agent_eval_smoke
+```
 
 ## Repository structure
 
